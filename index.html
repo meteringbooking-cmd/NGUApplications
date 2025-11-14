@@ -460,51 +460,59 @@
         <header>
             <h1>⚡ Next Generation Utilities</h1>
             <p class="subtitle">Application Management Platform</p>
+            <p id="authStatus" class="text-sm mt-2 text-gray-500">Connecting...</p>
         </header>
 
-        <div class="stats-container">
-            <div class="stat-card">
-                <div class="stat-info">
-                    <h3>Pending</h3>
-                    <div class="stat-number" id="pendingCount">0</div>
-                </div>
-                <div class="stat-icon pending-icon">⏳</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-info">
-                    <h3>Accepted</h3>
-                    <div class="stat-number" id="acceptedCount">0</div>
-                </div>
-                <div class="stat-icon accepted-icon">✓</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-info">
-                    <h3>Declined</h3>
-                    <div class="stat-number" id="declinedCount">0</div>
-                </div>
-                <div class="stat-icon declined-icon">✕</div>
-            </div>
-
-            <div class="stat-card">
-                <div class="stat-info">
-                    <h3>Total Applications</h3>
-                    <div class="stat-number" id="totalCount">0</div>
-                </div>
-                <div class="stat-icon total-icon">👥</div>
-            </div>
+        <!-- Loading Indicator -->
+        <div id="loading" class="text-center py-10 text-gray-500 font-semibold" style="display: none;">
+            Loading applications from Firestore...
         </div>
 
-        <div class="tabs-container">
-            <div class="tabs">
-                <button class="tab active" onclick="switchTab('all')">All Applications</button>
-                <button class="tab" onclick="switchTab('pending')">Pending</button>
-                <button class="tab" onclick="switchTab('accepted')">Accepted</button>
-                <button class="tab" onclick="switchTab('declined')">Declined</button>
+        <div id="mainContent" style="display: none;">
+            <div class="stats-container">
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <h3>Pending</h3>
+                        <div class="stat-number" id="pendingCount">0</div>
+                    </div>
+                    <div class="stat-icon pending-icon">⏳</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <h3>Accepted</h3>
+                        <div class="stat-number" id="acceptedCount">0</div>
+                    </div>
+                    <div class="stat-icon accepted-icon">✓</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <h3>Declined</h3>
+                        <div class="stat-number" id="declinedCount">0</div>
+                    </div>
+                    <div class="stat-icon declined-icon">✕</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-info">
+                        <h3>Total Applications</h3>
+                        <div class="stat-number" id="totalCount">0</div>
+                    </div>
+                    <div class="stat-icon total-icon">👥</div>
+                </div>
             </div>
 
-            <div class="applications-list" id="applicationsList"></div>
+            <div class="tabs-container">
+                <div class="tabs">
+                    <button class="tab active" data-tab="all">All Applications</button>
+                    <button class="tab" data-tab="pending">Pending</button>
+                    <button class="tab" data-tab="accepted">Accepted</button>
+                    <button class="tab" data-tab="declined">Declined</button>
+                </div>
+
+                <div class="applications-list" id="applicationsList"></div>
+            </div>
         </div>
     </div>
 
@@ -521,17 +529,119 @@
         </div>
     </div>
 
-    <script>
-        // Load applications from localStorage
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            collection, 
+            query, 
+            onSnapshot, 
+            doc, 
+            updateDoc,
+            setLogLevel 
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ============================================
+        // FIREBASE SETUP & AUTHENTICATION
+        // ============================================
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = {
+            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyVvbuEQ", // Example config, replaced by environment
+            authDomain: "nguapplications.firebaseapp.com",
+            projectId: "nguapplications",
+            storageBucket: "nguapplications.appspot.com",
+            messagingSenderId: "964264255496",
+            appId: "1:964264255496:web:05ce65f7633b95282031bd",
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        setLogLevel('debug');
+
         let applications = [];
-        try {
-            applications = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
-        } catch (e) {
-            console.warn('Could not load applications from localStorage');
+        let currentTab = 'all';
+        let isAuthReady = false;
+        let userId = null;
+        
+        const loadingEl = document.getElementById('loading');
+        const mainContentEl = document.getElementById('mainContent');
+        const authStatusEl = document.getElementById('authStatus');
+
+        loadingEl.style.display = 'block';
+
+        /**
+         * Authenticates the user and sets up the Firestore listener.
+         */
+        async function setupFirebase() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                userId = auth.currentUser.uid;
+                authStatusEl.textContent = `User ID: ${userId.substring(0, 8)}...`;
+                authStatusEl.classList.add('text-green-600');
+                isAuthReady = true;
+                
+                // Once authenticated, start listening to data
+                listenForApplications();
+            } catch (error) {
+                console.error("Firebase Authentication Error:", error);
+                authStatusEl.textContent = 'Authentication Failed. Cannot load data.';
+                authStatusEl.classList.add('text-red-600');
+                loadingEl.style.display = 'none';
+            }
         }
 
-        let currentTab = 'all';
+        /**
+         * Sets up the real-time listener for the applications collection.
+         */
+        function listenForApplications() {
+            if (!isAuthReady) return;
 
+            // Public Collection Path where applications were saved
+            const collectionPath = `artifacts/${appId}/public/data/applications`;
+            const applicationsCollectionRef = collection(db, collectionPath);
+            const applicationsQuery = query(applicationsCollectionRef);
+            
+            // onSnapshot provides real-time updates
+            onSnapshot(applicationsQuery, (snapshot) => {
+                const newApplications = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    // Convert Firestore Timestamp to readable date string
+                    const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'N/A';
+                    
+                    newApplications.push({
+                        id: doc.id, // Use doc.id for Firestore document ID
+                        date: date,
+                        ...data
+                    });
+                });
+
+                applications = newApplications;
+                updateStats();
+                renderApplications();
+                loadingEl.style.display = 'none';
+                mainContentEl.style.display = 'block';
+
+            }, (error) => {
+                console.error("Firestore Snapshot Error:", error);
+                loadingEl.innerHTML = '<p class="text-red-600">Error fetching data. Check console for details.</p>';
+            });
+        }
+
+        // ============================================
+        // UI & DATA DISPLAY LOGIC
+        // ============================================
+        
+        /**
+         * Updates the counts in the stat cards based on the current applications array.
+         */
         function updateStats() {
             const pending = applications.filter(app => app.status === 'pending').length;
             const accepted = applications.filter(app => app.status === 'accepted').length;
@@ -543,103 +653,16 @@
             document.getElementById('declinedCount').textContent = declined;
             document.getElementById('totalCount').textContent = total;
         }
-
-        function viewCV(id) {
-            const app = applications.find(a => a.id === id);
-            if (!app) return;
-
-            const modal = document.getElementById('cvModal');
-            const modalTitle = document.getElementById('modalTitle');
-            const modalBody = document.getElementById('modalBody');
-
-            modalTitle.textContent = `CV - ${app.name}`;
-
-            if (!app.cvData || !app.cvData.data) {
-                modalBody.innerHTML = `
-                    <div class="no-cv-message">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        <h3>CV Not Available</h3>
-                        <p>The CV file for this application was not stored.</p>
-                        <p style="margin-top: 10px;"><strong>Filename:</strong> ${app.cv || 'Not provided'}</p>
-                    </div>
-                `;
-            } else {
-                const isPDF = app.cvData.type === 'application/pdf';
-                
-                if (isPDF) {
-                    modalBody.innerHTML = `
-                        <iframe 
-                            src="${app.cvData.data}" 
-                            class="cv-viewer"
-                            type="application/pdf"
-                        ></iframe>
-                    `;
-                } else {
-                    // For DOC/DOCX files, show download option
-                    modalBody.innerHTML = `
-                        <div class="no-cv-message">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                            </svg>
-                            <h3>${app.cvData.name}</h3>
-                            <p>This is a ${app.cvData.type} file.</p>
-                            <p style="margin-top: 10px;">Click below to download and view in your preferred application.</p>
-                            <button 
-                                class="btn btn-view-cv" 
-                                style="margin-top: 20px; padding: 12px 24px;"
-                                onclick="downloadCV(${id})"
-                            >
-                                Download CV
-                            </button>
-                        </div>
-                    `;
-                }
-            }
-
-            modal.classList.add('show');
-        }
-
-        function downloadCV(id) {
-            const app = applications.find(a => a.id === id);
-            if (!app || !app.cvData) return;
-
-            const link = document.createElement('a');
-            link.href = app.cvData.data;
-            link.download = app.cvData.name;
-            link.click();
-        }
-
-        function closeModal() {
-            const modal = document.getElementById('cvModal');
-            modal.classList.remove('show');
-        }
-
-        // Close modal when clicking outside
-        document.getElementById('cvModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
-            }
-        });
-
-        // Close modal with ESC key
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal();
-            }
-        });
-
+        
+        /**
+         * Renders the application list based on the current tab filter.
+         */
         function renderApplications() {
             const container = document.getElementById('applicationsList');
             let filtered = currentTab === 'all' ? applications : applications.filter(app => app.status === currentTab);
 
-            // Sort by date (newest first) and then by ID
-            filtered.sort((a, b) => {
-                const dateCompare = new Date(b.date) - new Date(a.date);
-                if (dateCompare !== 0) return dateCompare;
-                return b.id - a.id;
-            });
+            // Sort by date (newest first)
+            filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             if (filtered.length === 0) {
                 container.innerHTML = `
@@ -655,21 +678,27 @@
             }
 
             container.innerHTML = filtered.map(app => {
-                const isNew = app.isNew || false;
                 const positionDisplay = app.position ? app.position : 'N/A';
+                const cvButton = app.cvURL
+                    ? `<button class="btn btn-view-cv" onclick="viewCV('${app.cvURL}', '${app.name}')">View CV</button>`
+                    : `<button class="btn btn-view-cv" disabled title="No CV URL found">CV Missing</button>`;
                 
+                const qualificationsHtml = app.qualifications && Array.isArray(app.qualifications)
+                    ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
+                    : '<span class="detail-value">None listed</span>';
+
                 return `
                 <div class="application-card">
                     <div class="card-header">
                         <div class="applicant-info">
                             <h4>
                                 ${app.name}
-                                ${isNew ? '<span class="new-badge">NEW</span>' : ''}
+                                ${app.isNew && app.status === 'pending' ? '<span class="new-badge">NEW</span>' : ''}
                             </h4>
                             <p>${app.email}</p>
                         </div>
                         <div>
-                            <span class="position-tag ${app.position ? app.position.toLowerCase().replace(/\s+/g, '-') : 'smet2-engineer'}">${positionDisplay}</span>
+                            <span class="position-tag ${positionDisplay.toLowerCase().replace(/\s+/g, '-')}">${positionDisplay}</span>
                         </div>
                         <div class="date">${app.date}</div>
                         <div>
@@ -701,80 +730,134 @@
                         <div class="detail-item">
                             <div class="detail-label">Qualifications</div>
                             <div class="qualifications">
-                                ${app.qualifications && app.qualifications.length > 0 
-                                    ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
-                                    : '<span class="detail-value">None listed</span>'}
+                                ${qualificationsHtml}
                             </div>
                         </div>
                     </div>
 
                     <div class="action-buttons">
-                        ${app.cv ? `<button class="btn btn-view-cv" onclick="viewCV(${app.id})">View CV</button>` : ''}
+                        ${cvButton}
                         ${app.status === 'pending' ? `
-                            <button class="btn btn-accept" onclick="updateStatus(${app.id}, 'accepted')">Accept</button>
-                            <button class="btn btn-decline" onclick="updateStatus(${app.id}, 'declined')">Decline</button>
+                            <button class="btn btn-accept" onclick="updateStatus('${app.id}', 'accepted')">Accept</button>
+                            <button class="btn btn-decline" onclick="updateStatus('${app.id}', 'declined')">Decline</button>
                         ` : ''}
                     </div>
                 </div>
-            `}).join('');
+                `
+            }).join('');
         }
+        
+        /**
+         * Updates the status of an application in Firestore.
+         * @param {string} docId The Firestore document ID.
+         * @param {string} newStatus The new status ('accepted' or 'declined').
+         */
+        window.updateStatus = async function(docId, newStatus) {
+            if (!isAuthReady) {
+                console.error("Authentication not ready. Cannot update status.");
+                return;
+            }
+            
+            // Public Collection Path
+            const collectionPath = `artifacts/${appId}/public/data/applications`;
+            const docRef = doc(db, collectionPath, docId);
 
-        function updateStatus(id, newStatus) {
-            const app = applications.find(a => a.id === id);
-            if (app) {
-                app.status = newStatus;
-                app.isNew = false;
-                saveApplications();
-                updateStats();
-                renderApplications();
+            try {
+                await updateDoc(docRef, {
+                    status: newStatus,
+                    isNew: false // Mark as seen once status is updated
+                });
+                console.log(`Application ${docId} updated to ${newStatus}`);
+                // The onSnapshot listener will handle the UI refresh
+            } catch (error) {
+                console.error("Error updating status:", error);
+                // In a real app, show a user-facing error message here
             }
         }
-
-        function switchTab(tab) {
+        
+        /**
+         * Switches the application view tab.
+         * @param {string} tab The tab to switch to ('all', 'pending', 'accepted', 'declined').
+         */
+        window.switchTab = function(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
+            document.querySelector(`.tab[data-tab="${tab}"]`).classList.add('active');
             renderApplications();
         }
 
-        function saveApplications() {
-            try {
-                window.localStorage.setItem('nguApplications', JSON.stringify(applications));
-            } catch (e) {
-                console.warn('Could not save to localStorage');
+        // ============================================
+        // MODAL LOGIC (for CV Viewer)
+        // ============================================
+
+        /**
+         * Opens the modal and loads the CV using the public URL.
+         * @param {string} cvURL The public download URL from Firebase Storage.
+         * @param {string} name Applicant's name.
+         */
+        window.viewCV = function(cvURL, name) {
+            const modal = document.getElementById('cvModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+
+            modalTitle.textContent = `CV - ${name}`;
+
+            if (cvURL && cvURL.startsWith('https://')) {
+                // We use an iframe to load the public Storage URL directly. 
+                // This works best for PDFs; other files will prompt a download.
+                modalBody.innerHTML = `
+                    <iframe 
+                        src="${cvURL}" 
+                        class="cv-viewer"
+                        sandbox="allow-scripts allow-same-origin allow-popups allow-downloads"
+                        allow="fullscreen"
+                    ></iframe>
+                    <p class="text-xs text-center text-gray-500 mt-2">Note: Viewing DOC/DOCX files may depend on browser support. You may need to download the file.</p>
+                `;
+            } else {
+                modalBody.innerHTML = `
+                    <div class="no-cv-message">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h3>CV Link Missing or Invalid</h3>
+                        <p>The CV file was not uploaded successfully or the link is expired/private.</p>
+                        <a href="#" onclick="closeModal()" class="text-sm text-blue-500 hover:underline mt-2 inline-block">Close Viewer</a>
+                    </div>
+                `;
             }
+
+            modal.classList.add('show');
         }
 
-        // Listen for new applications from the form
-        window.addEventListener('storage', function(e) {
-            if (e.key === 'nguApplications') {
-                try {
-                    applications = JSON.parse(e.newValue) || [];
-                    updateStats();
-                    renderApplications();
-                } catch (err) {
-                    console.warn('Error parsing storage event');
-                }
+        window.closeModal = function() {
+            document.getElementById('cvModal').classList.remove('show');
+            document.getElementById('modalBody').innerHTML = ''; // Clear content on close
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('cvModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
             }
         });
 
-        // Check for new applications every 2 seconds
-        setInterval(() => {
-            try {
-                const stored = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
-                if (stored.length > applications.length) {
-                    applications = stored;
-                    updateStats();
-                    renderApplications();
-                }
-            } catch (e) {
-                console.warn('Error checking for new applications');
+        // Close modal with ESC key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
             }
-        }, 2000);
-
-        // Initialize
-        updateStats();
-        renderApplications();
+        });
+        
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        setupFirebase();
+        
+        // Attach switchTab event listeners to buttons
+        document.querySelectorAll('.tabs .tab').forEach(button => {
+            button.addEventListener('click', () => switchTab(button.getAttribute('data-tab')));
+        });
     </script>
 </body>
 </html>
