@@ -204,7 +204,7 @@
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
 
-        .submit-btn:active {
+        .submit-btn:active:not(:disabled) {
             transform: translateY(0);
         }
 
@@ -245,25 +245,6 @@
             display: block;
         }
 
-        .progress {
-            margin-top: 10px;
-            height: 4px;
-            background: #e5e7eb;
-            border-radius: 2px;
-            overflow: hidden;
-            display: none;
-        }
-
-        .progress.show {
-            display: block;
-        }
-
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            transition: width 0.3s ease;
-        }
-
         @media (max-width: 768px) {
             .form-container {
                 padding: 25px;
@@ -288,7 +269,7 @@
 
         <div class="form-container">
             <div class="success-message" id="successMessage">
-                ✓ Application submitted successfully! We'll be in touch soon.
+                ✓ Application submitted successfully! Confirmation emails have been sent.
             </div>
 
             <div class="error-message" id="errorMessage"></div>
@@ -298,8 +279,8 @@
                     <label for="position">Position Applying For <span class="required">*</span></label>
                     <select id="position" name="position" required>
                         <option value="">Select a position...</option>
-                        <option value="smet2-engineer">SMET2 Engineer</option>
-                        <option value="solar-engineer">Solar Engineer</option>
+                        <option value="SMET2 Engineer">SMET2 Engineer</option>
+                        <option value="Solar Engineer">Solar Engineer</option>
                     </select>
                 </div>
 
@@ -345,9 +326,6 @@
                         <input type="file" id="cv" name="cv" accept=".pdf,.doc,.docx" required>
                     </div>
                     <div class="file-name" id="fileName"></div>
-                    <div class="progress" id="uploadProgress">
-                        <div class="progress-bar" id="progressBar"></div>
-                    </div>
                 </div>
 
                 <div class="form-group">
@@ -359,15 +337,15 @@
                     <label>Qualifications <span class="required">*</span></label>
                     <div class="qualifications-group">
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" id="eusr" name="qualifications" value="eusr">
+                            <input type="checkbox" id="eusr" name="qualifications" value="EUSR">
                             <label for="eusr">EUSR</label>
                         </div>
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" id="gas-cert" name="qualifications" value="gas-cert">
+                            <input type="checkbox" id="gas-cert" name="qualifications" value="Gas Cert">
                             <label for="gas-cert">Gas Cert</label>
                         </div>
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" id="diploma" name="qualifications" value="diploma">
+                            <input type="checkbox" id="diploma" name="qualifications" value="Diploma">
                             <label for="diploma">Diploma</label>
                         </div>
                     </div>
@@ -378,11 +356,13 @@
         </div>
     </div>
 
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    
+    <!-- Firebase SDK -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
         // Firebase configuration
         const firebaseConfig = {
@@ -397,31 +377,74 @@
 
         // Initialize Firebase
         const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
         const db = getFirestore(app);
-        const storage = getStorage(app);
 
-        // Authenticate anonymously
-        signInAnonymously(auth).catch((error) => {
-            console.error('Auth error:', error);
-        });
+        // EmailJS Configuration
+        const EMAIL_CONFIG = {
+            publicKey: 'ziLnha91scpGjFABh',
+            serviceId: 'service_2qhpxbu',
+            applicantTemplateId: 'template_9yts90w',
+            adminTemplateId: 'template_rdg2zp9'
+        };
+
+        emailjs.init(EMAIL_CONFIG.publicKey);
 
         // File upload handling
         const fileInput = document.getElementById('cv');
         const fileNameDisplay = document.getElementById('fileName');
-        const uploadProgress = document.getElementById('uploadProgress');
-        const progressBar = document.getElementById('progressBar');
 
         fileInput.addEventListener('change', function(e) {
             if (this.files && this.files[0]) {
                 const fileName = this.files[0].name;
-                const fileSize = (this.files[0].size / 1024 / 1024).toFixed(2);
-                fileNameDisplay.textContent = `✓ ${fileName} (${fileSize} MB)`;
+                fileNameDisplay.textContent = `✓ ${fileName}`;
                 fileNameDisplay.classList.add('show');
             } else {
                 fileNameDisplay.classList.remove('show');
             }
         });
+
+        async function sendEmails(applicationData) {
+            const errors = [];
+
+            // Send email to applicant
+            try {
+                await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    EMAIL_CONFIG.applicantTemplateId,
+                    {
+                        to_email: applicationData.email,
+                        to_name: applicationData.name,
+                        position: applicationData.position
+                    }
+                );
+            } catch (error) {
+                console.error('Error sending applicant email:', error);
+                errors.push('applicant');
+            }
+
+            // Send email to Barry
+            try {
+                await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    EMAIL_CONFIG.adminTemplateId,
+                    {
+                        to_email: 'barry.dixon@next.gen.uk',
+                        applicant_name: applicationData.name,
+                        position: applicationData.position,
+                        applicant_email: applicationData.email,
+                        applicant_phone: applicationData.phone,
+                        cv_name: applicationData.cv,
+                        qualifications: applicationData.qualifications.join(', '),
+                        notice_period: applicationData.notice
+                    }
+                );
+            } catch (error) {
+                console.error('Error sending admin email:', error);
+                errors.push('admin');
+            }
+
+            return errors;
+        }
 
         // Form submission
         const form = document.getElementById('applicationForm');
@@ -432,17 +455,12 @@
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
-            // Check if at least one qualification is selected
+            // Check qualifications
             const qualifications = document.querySelectorAll('input[name="qualifications"]:checked');
             if (qualifications.length === 0) {
-                showError('Please select at least one qualification');
-                return;
-            }
-
-            // Check if file is selected
-            const cvFile = fileInput.files[0];
-            if (!cvFile) {
-                showError('Please upload your CV');
+                errorMessage.textContent = '⚠️ Please select at least one qualification';
+                errorMessage.classList.add('show');
+                setTimeout(() => errorMessage.classList.remove('show'), 5000);
                 return;
             }
 
@@ -450,91 +468,79 @@
             submitBtn.disabled = true;
             submitBtn.textContent = 'Submitting...';
 
+            // Collect form data
+            const formData = new FormData(form);
+            
+            // Convert CV to base64
+            let cvData = null;
+            if (fileInput.files[0]) {
+                const file = fileInput.files[0];
+                cvData = {
+                    name: file.name,
+                    type: file.type,
+                    data: await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    })
+                };
+            }
+            
+            const applicationData = {
+                position: formData.get('position'),
+                name: formData.get('name'),
+                address: formData.get('address'),
+                city: formData.get('city'),
+                postcode: formData.get('postcode'),
+                email: formData.get('email'),
+                phone: formData.get('phone'),
+                cv: fileInput.files[0]?.name || '',
+                cvData: cvData,
+                notice: formData.get('notice'),
+                qualifications: Array.from(qualifications).map(q => q.value),
+                date: new Date().toISOString().split('T')[0],
+                status: 'pending'
+            };
+
+            // Send emails
+            const emailErrors = await sendEmails(applicationData);
+
+            // Save to Firestore
             try {
-                // Upload CV to Firebase Storage
-                const cvFileName = `cvs/${Date.now()}_${cvFile.name}`;
-                const storageRef = ref(storage, cvFileName);
-                const uploadTask = uploadBytesResumable(storageRef, cvFile);
-
-                uploadProgress.classList.add('show');
-
-                // Monitor upload progress
-                uploadTask.on('state_changed',
-                    (snapshot) => {
-                        const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                        progressBar.style.width = progress + '%';
-                    },
-                    (error) => {
-                        console.error('Upload error:', error);
-                        showError('Error uploading CV: ' + error.message);
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Submit Application';
-                        uploadProgress.classList.remove('show');
-                    },
-                    async () => {
-                        // Upload completed successfully
-                        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-
-                        // Collect form data
-                        const formData = new FormData(form);
-                        const applicationData = {
-                            position: formData.get('position'),
-                            name: formData.get('name'),
-                            address: formData.get('address'),
-                            city: formData.get('city'),
-                            postcode: formData.get('postcode').toUpperCase(),
-                            email: formData.get('email'),
-                            phone: formData.get('phone'),
-                            cvURL: downloadURL,
-                            cvFileName: cvFile.name,
-                            notice: formData.get('notice'),
-                            qualifications: Array.from(qualifications).map(q => q.value),
-                            status: 'pending',
-                            isNew: true,
-                            timestamp: serverTimestamp()
-                        };
-
-                        // Save to Firestore
-                        await addDoc(collection(db, 'applications'), applicationData);
-
-                        // Show success message
-                        successMessage.classList.add('show');
-                        errorMessage.classList.remove('show');
-                        form.reset();
-                        fileNameDisplay.classList.remove('show');
-                        uploadProgress.classList.remove('show');
-                        progressBar.style.width = '0%';
-
-                        // Scroll to top
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-
-                        // Hide success message after 5 seconds
-                        setTimeout(() => {
-                            successMessage.classList.remove('show');
-                        }, 5000);
-
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = 'Submit Application';
-                    }
-                );
-
+                await addDoc(collection(db, 'applications'), {
+                    ...applicationData,
+                    timestamp: serverTimestamp(),
+                    isNew: true
+                });
+                console.log('Application saved to Firestore');
             } catch (error) {
-                console.error('Submission error:', error);
-                showError('Error submitting application: ' + error.message);
+                console.error('Error saving to Firestore:', error);
                 submitBtn.disabled = false;
                 submitBtn.textContent = 'Submit Application';
-                uploadProgress.classList.remove('show');
+                errorMessage.textContent = '⚠️ Failed to submit application: ' + error.message;
+                errorMessage.classList.add('show');
+                setTimeout(() => errorMessage.classList.remove('show'), 8000);
+                return;
+            }
+
+            // Re-enable submit button
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Application';
+
+            // Show result message
+            if (emailErrors.length === 0) {
+                successMessage.classList.add('show');
+                form.reset();
+                fileNameDisplay.classList.remove('show');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                setTimeout(() => successMessage.classList.remove('show'), 5000);
+            } else {
+                errorMessage.textContent = `⚠️ Application saved but some emails failed to send.`;
+                errorMessage.classList.add('show');
+                setTimeout(() => errorMessage.classList.remove('show'), 8000);
             }
         });
-
-        function showError(message) {
-            errorMessage.textContent = '✕ ' + message;
-            errorMessage.classList.add('show');
-            successMessage.classList.remove('show');
-            setTimeout(() => {
-                errorMessage.classList.remove('show');
-            }, 5000);
-        }
 
         // Postcode formatting
         const postcodeInput = document.getElementById('postcode');
