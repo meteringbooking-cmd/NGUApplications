@@ -199,13 +199,18 @@
             margin-top: 10px;
         }
 
-        .submit-btn:hover {
+        .submit-btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
 
-        .submit-btn:active {
+        .submit-btn:active:not(:disabled) {
             transform: translateY(0);
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         .success-message {
@@ -222,6 +227,37 @@
 
         .success-message.show {
             display: block;
+        }
+
+        .error-message {
+            display: none;
+            padding: 16px;
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            border-radius: 8px;
+            color: #991b1b;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 500;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .setup-notice {
+            padding: 16px;
+            background: #fef3c7;
+            border: 2px solid #f59e0b;
+            border-radius: 8px;
+            color: #92400e;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+
+        .setup-notice strong {
+            display: block;
+            margin-bottom: 8px;
         }
 
         @media (max-width: 768px) {
@@ -248,16 +284,18 @@
 
         <div class="form-container">
             <div class="success-message" id="successMessage">
-                ✓ Application submitted successfully! We'll be in touch soon.
+                ✓ Application submitted successfully! Confirmation emails have been sent.
             </div>
+
+            <div class="error-message" id="errorMessage"></div>
 
             <form id="applicationForm">
                 <div class="form-group">
                     <label for="position">Position Applying For <span class="required">*</span></label>
                     <select id="position" name="position" required>
                         <option value="">Select a position...</option>
-                        <option value="smet2-engineer">SMET2 Engineer</option>
-                        <option value="solar-engineer">Solar Engineer</option>
+                        <option value="SMET2 Engineer">SMET2 Engineer</option>
+                        <option value="Solar Engineer">Solar Engineer</option>
                     </select>
                 </div>
 
@@ -314,26 +352,42 @@
                     <label>Qualifications <span class="required">*</span></label>
                     <div class="qualifications-group">
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" id="eusr" name="qualifications" value="eusr">
+                            <input type="checkbox" id="eusr" name="qualifications" value="EUSR">
                             <label for="eusr">EUSR</label>
                         </div>
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" id="gas-cert" name="qualifications" value="gas-cert">
+                            <input type="checkbox" id="gas-cert" name="qualifications" value="Gas Cert">
                             <label for="gas-cert">Gas Cert</label>
                         </div>
                         <div class="checkbox-wrapper">
-                            <input type="checkbox" id="diploma" name="qualifications" value="diploma">
+                            <input type="checkbox" id="diploma" name="qualifications" value="Diploma">
                             <label for="diploma">Diploma</label>
                         </div>
                     </div>
                 </div>
 
-                <button type="submit" class="submit-btn">Submit Application</button>
+                <button type="submit" class="submit-btn" id="submitBtn">Submit Application</button>
             </form>
         </div>
     </div>
 
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+    
     <script>
+        // ============================================
+        // EMAIL CONFIGURATION
+        // ============================================
+        const EMAIL_CONFIG = {
+            publicKey: 'ziLnha91scpGjFABh',
+            serviceId: 'service_2qhpxbu',
+            applicantTemplateId: 'template_9yts90w',
+            adminTemplateId: 'template_rdg2zp9'
+        };
+
+        // Initialize EmailJS
+        emailjs.init(EMAIL_CONFIG.publicKey);
+
         // File upload handling
         const fileInput = document.getElementById('cv');
         const fileNameDisplay = document.getElementById('fileName');
@@ -351,29 +405,72 @@
         // Form submission
         const form = document.getElementById('applicationForm');
         const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const submitBtn = document.getElementById('submitBtn');
 
-        form.addEventListener('submit', function(e) {
+        async function sendEmails(applicationData) {
+            const errors = [];
+
+            // Send email to applicant
+            try {
+                await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    EMAIL_CONFIG.applicantTemplateId,
+                    {
+                        to_email: applicationData.email,
+                        to_name: applicationData.name,
+                        position: applicationData.position
+                    }
+                );
+            } catch (error) {
+                console.error('Error sending applicant email:', error);
+                errors.push('applicant');
+            }
+
+            // Send email to Barry
+            try {
+                await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    EMAIL_CONFIG.adminTemplateId,
+                    {
+                        to_email: 'barry.dixon@next.gen.uk',
+                        applicant_name: applicationData.name,
+                        position: applicationData.position,
+                        applicant_email: applicationData.email,
+                        applicant_phone: applicationData.phone,
+                        cv_name: applicationData.cv,
+                        qualifications: applicationData.qualifications.join(', '),
+                        notice_period: applicationData.notice
+                    }
+                );
+            } catch (error) {
+                console.error('Error sending admin email:', error);
+                errors.push('admin');
+            }
+
+            return errors;
+        }
+
+        form.addEventListener('submit', async function(e) {
             e.preventDefault();
 
             // Check if at least one qualification is selected
             const qualifications = document.querySelectorAll('input[name="qualifications"]:checked');
             if (qualifications.length === 0) {
-                alert('Please select at least one qualification');
+                errorMessage.textContent = '⚠️ Please select at least one qualification';
+                errorMessage.classList.add('show');
+                setTimeout(() => errorMessage.classList.remove('show'), 5000);
                 return;
             }
+
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
 
             // Collect form data
             const formData = new FormData(form);
             
-            // Get existing applications from localStorage
-            let applications = JSON.parse(localStorage.getItem('nguApplications')) || [];
-            
-            // Find the highest existing ID
-            const maxId = applications.length > 0 ? Math.max(...applications.map(app => app.id)) : 0;
-            
-            // Create new application object
-            const newApplication = {
-                id: maxId + 1,
+            const applicationData = {
                 position: formData.get('position'),
                 name: formData.get('name'),
                 address: formData.get('address'),
@@ -385,31 +482,47 @@
                 notice: formData.get('notice'),
                 qualifications: Array.from(qualifications).map(q => q.value),
                 date: new Date().toISOString().split('T')[0],
-                status: 'pending',
-                isNew: true
+                status: 'pending'
             };
 
-            // Add to applications array
-            applications.push(newApplication);
-            
-            // Save to localStorage
-            localStorage.setItem('nguApplications', JSON.stringify(applications));
+            // Send emails
+            const emailErrors = await sendEmails(applicationData);
 
-            // Log to console (in production, you'd send this to a server)
-            console.log('Application submitted:', newApplication);
+            // Store application data
+            let applications = [];
+            try {
+                const stored = window.localStorage.getItem('nguApplications');
+                applications = stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                console.warn('localStorage not available, using session storage');
+            }
 
-            // Show success message
-            successMessage.classList.add('show');
-            form.reset();
-            fileNameDisplay.classList.remove('show');
+            const maxId = applications.length > 0 ? Math.max(...applications.map(app => app.id || 0)) : 0;
+            applicationData.id = maxId + 1;
+            applications.push(applicationData);
 
-            // Scroll to top
-            window.scrollTo({ top: 0, behavior: 'smooth' });
+            try {
+                window.localStorage.setItem('nguApplications', JSON.stringify(applications));
+            } catch (e) {
+                console.warn('Could not save to localStorage');
+            }
 
-            // Hide success message after 5 seconds
-            setTimeout(() => {
-                successMessage.classList.remove('show');
-            }, 5000);
+            // Re-enable submit button
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Submit Application';
+
+            // Show result message
+            if (emailErrors.length === 0) {
+                successMessage.classList.add('show');
+                form.reset();
+                fileNameDisplay.classList.remove('show');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+                setTimeout(() => successMessage.classList.remove('show'), 5000);
+            } else {
+                errorMessage.textContent = `⚠️ Application saved but some emails failed to send. Please contact recruitment@next.gen.uk`;
+                errorMessage.classList.add('show');
+                setTimeout(() => errorMessage.classList.remove('show'), 8000);
+            }
         });
 
         // Postcode formatting
