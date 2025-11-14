@@ -642,27 +642,15 @@
     <!-- EmailJS SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyvVbuEQ",
-            authDomain: "nguapplications.firebaseapp.com",
-            projectId: "nguapplications",
-            storageBucket: "nguapplications.firebasestorage.app",
-            messagingSenderId: "964264255496",
-            appId: "1:964264255496:web:05ce65f7633b95282031bd",
-            measurementId: "G-Z1YFTXW6N8"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-
+    <script>
+        // Load applications
         let applications = [];
+        try {
+            applications = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
+        } catch (e) {
+            console.warn('Could not load applications');
+        }
+
         let currentTab = 'all';
         let pendingDeclineApp = null;
         let pendingContractApp = null;
@@ -679,29 +667,6 @@
         const TEAMS_WEBHOOK = 'https://nextgenerationutilities.webhook.office.com/webhookb2/b6114c26-5b1e-48fe-b43d-e0b6e16b62bc@e8166c8d-8eb6-4a45-8857-9b378ad38b57/IncomingWebhook/ec872dc53a9d48898aaaca5d55a0e5f2/c7d64763-ac4d-4982-8bb0-4c9649cc20e7/V2doZ2Hvoz4lrNzask1bZD6-uShY7d6HV9DfCkwqVYneE1';
 
         emailjs.init(EMAIL_CONFIG.publicKey);
-
-        // Load applications from Firestore
-        const applicationsRef = collection(db, 'applications');
-        const q = query(applicationsRef, orderBy('timestamp', 'desc'));
-
-        onSnapshot(q, (snapshot) => {
-            applications = [];
-            snapshot.forEach((docSnap) => {
-                const data = docSnap.data();
-                const timestamp = data.timestamp?.toDate() || new Date();
-                applications.push({
-                    firestoreId: docSnap.id,
-                    ...data,
-                    date: timestamp.toLocaleDateString() + ' ' + timestamp.toLocaleTimeString()
-                });
-            });
-            console.log('Loaded', applications.length, 'applications from Firestore');
-            updateStats();
-            renderApplications();
-        }, (error) => {
-            console.error('Firestore error:', error);
-            alert('Error loading applications: ' + error.message);
-        });
 
         async function sendDeclineEmail(applicant, reason) {
             const templateId = reason === 'area' 
