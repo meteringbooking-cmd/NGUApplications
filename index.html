@@ -460,11 +460,15 @@
         <header>
             <h1>⚡ Next Generation Utilities</h1>
             <p class="subtitle">Application Management Platform</p>
-            <p id="authStatus" class="text-sm mt-2 text-gray-500">Connecting...</p>
+            <div class="flex justify-center items-center mt-2">
+                <p id="authStatus" class="text-sm text-gray-500 font-semibold mr-2">Connecting...</p>
+                <!-- Placeholder for user ID display for collaborative context -->
+                <p id="userIdDisplay" class="text-xs text-gray-400"></p>
+            </div>
         </header>
 
         <!-- Loading Indicator -->
-        <div id="loading" class="text-center py-10 text-gray-500 font-semibold" style="display: none;">
+        <div id="loading" class="text-center py-10 text-gray-500 font-semibold">
             Loading applications from Firestore...
         </div>
 
@@ -531,7 +535,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { 
             getFirestore, 
             collection, 
@@ -546,16 +550,17 @@
         // FIREBASE SETUP & AUTHENTICATION
         // ============================================
 
+        // --- FIX: Use environment variables for configuration ---
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = {
-            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyVvbuEQ", // Example config, replaced by environment
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyVvbuEQ",
             authDomain: "nguapplications.firebaseapp.com",
             projectId: "nguapplications",
             storageBucket: "nguapplications.firebasestorage.app",
             messagingSenderId: "964264255496",
             appId: "1:964264255496:web:05ce65f7633b95282031bd",
         };
-
+        
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
@@ -569,6 +574,7 @@
         const loadingEl = document.getElementById('loading');
         const mainContentEl = document.getElementById('mainContent');
         const authStatusEl = document.getElementById('authStatus');
+        const userIdDisplayEl = document.getElementById('userIdDisplay');
 
         loadingEl.style.display = 'block';
 
@@ -577,21 +583,39 @@
          */
         async function setupFirebase() {
             try {
+                // Determine authentication method based on environment token
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     await signInWithCustomToken(auth, __initial_auth_token);
                 } else {
                     await signInAnonymously(auth);
                 }
-                userId = auth.currentUser.uid;
-                authStatusEl.textContent = `User ID: ${userId.substring(0, 8)}...`;
-                authStatusEl.classList.add('text-green-600');
-                isAuthReady = true;
                 
-                // Once authenticated, start listening to data
-                listenForApplications();
+                // onAuthStateChanged is the most reliable way to get the user state
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        authStatusEl.textContent = 'Authenticated: Ready';
+                        authStatusEl.classList.remove('text-gray-500', 'text-red-600');
+                        authStatusEl.classList.add('text-green-600');
+                        userIdDisplayEl.textContent = `User ID: ${userId}`;
+                        isAuthReady = true;
+                        
+                        // Once authenticated, start listening to data
+                        listenForApplications();
+                    } else {
+                        // This handles the anonymous fallback case or sign-out (though unexpected in this env)
+                        console.error("Authentication check complete, but user is null.");
+                        authStatusEl.textContent = 'Authentication Failed. Cannot load data.';
+                        authStatusEl.classList.remove('text-gray-500', 'text-green-600');
+                        authStatusEl.classList.add('text-red-600');
+                        loadingEl.style.display = 'none';
+                    }
+                });
+
             } catch (error) {
-                console.error("Firebase Authentication Error:", error);
+                console.error("Firebase Authentication Error during sign-in:", error);
                 authStatusEl.textContent = 'Authentication Failed. Cannot load data.';
+                authStatusEl.classList.remove('text-gray-500', 'text-green-600');
                 authStatusEl.classList.add('text-red-600');
                 loadingEl.style.display = 'none';
             }
@@ -601,7 +625,10 @@
          * Sets up the real-time listener for the applications collection.
          */
         function listenForApplications() {
-            if (!isAuthReady) return;
+            if (!isAuthReady || !userId) {
+                 console.warn("Attempted to call listenForApplications before authentication was ready.");
+                 return;
+            }
 
             // Public Collection Path where applications were saved
             const collectionPath = `artifacts/${appId}/public/data/applications`;
@@ -614,7 +641,13 @@
                 snapshot.forEach((doc) => {
                     const data = doc.data();
                     // Convert Firestore Timestamp to readable date string
-                    const date = data.timestamp ? data.timestamp.toDate().toLocaleString() : 'N/A';
+                    // Handle case where timestamp might be missing or not a Firebase Timestamp object
+                    let date = 'N/A';
+                    if (data.timestamp && typeof data.timestamp.toDate === 'function') {
+                        date = data.timestamp.toDate().toLocaleString();
+                    } else if (data.timestamp instanceof Date) {
+                        date = data.timestamp.toLocaleString();
+                    }
                     
                     newApplications.push({
                         id: doc.id, // Use doc.id for Firestore document ID
@@ -667,7 +700,7 @@
             if (filtered.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
                         </svg>
                         <h3>No applications found</h3>
@@ -681,11 +714,11 @@
                 const positionDisplay = app.position ? app.position : 'N/A';
                 const cvButton = app.cvURL
                     ? `<button class="btn btn-view-cv" onclick="viewCV('${app.cvURL}', '${app.name}')">View CV</button>`
-                    : `<button class="btn btn-view-cv" disabled title="No CV URL found">CV Missing</button>`;
+                    : `<button class="btn btn-view-cv opacity-50 cursor-not-allowed" disabled title="No CV URL found">CV Missing</button>`;
                 
                 const qualificationsHtml = app.qualifications && Array.isArray(app.qualifications)
                     ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
-                    : '<span class="detail-value">None listed</span>';
+                    : '<span class="detail-value text-gray-400">None listed</span>';
 
                 return `
                 <div class="application-card">
@@ -695,10 +728,10 @@
                                 ${app.name}
                                 ${app.isNew && app.status === 'pending' ? '<span class="new-badge">NEW</span>' : ''}
                             </h4>
-                            <p>${app.email}</p>
+                            <p>${app.email || 'N/A'}</p>
                         </div>
                         <div>
-                            <span class="position-tag ${positionDisplay.toLowerCase().replace(/\s+/g, '-')}">${positionDisplay}</span>
+                            <span class="position-tag">${positionDisplay}</span>
                         </div>
                         <div class="date">${app.date}</div>
                         <div>
@@ -727,8 +760,8 @@
                             <div class="detail-label">Notice Period</div>
                             <div class="detail-value">${app.notice || 'N/A'}</div>
                         </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Qualifications</div>
+                        <div class="detail-item col-span-full">
+                            <div class="detail-label mb-1">Qualifications</div>
                             <div class="qualifications">
                                 ${qualificationsHtml}
                             </div>
@@ -753,8 +786,8 @@
          * @param {string} newStatus The new status ('accepted' or 'declined').
          */
         window.updateStatus = async function(docId, newStatus) {
-            if (!isAuthReady) {
-                console.error("Authentication not ready. Cannot update status.");
+            if (!isAuthReady || !userId) {
+                console.error("Authentication not ready or user ID missing. Cannot update status.");
                 return;
             }
             
@@ -763,6 +796,7 @@
             const docRef = doc(db, collectionPath, docId);
 
             try {
+                // Ensure the status update is done via a dedicated update call
                 await updateDoc(docRef, {
                     status: newStatus,
                     isNew: false // Mark as seen once status is updated
@@ -803,8 +837,7 @@
             modalTitle.textContent = `CV - ${name}`;
 
             if (cvURL && cvURL.startsWith('https://')) {
-                // We use an iframe to load the public Storage URL directly. 
-                // This works best for PDFs; other files will prompt a download.
+                // Use an iframe to load the public Storage URL directly. 
                 modalBody.innerHTML = `
                     <iframe 
                         src="${cvURL}" 
@@ -817,12 +850,12 @@
             } else {
                 modalBody.innerHTML = `
                     <div class="no-cv-message">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
                         <h3>CV Link Missing or Invalid</h3>
                         <p>The CV file was not uploaded successfully or the link is expired/private.</p>
-                        <a href="#" onclick="closeModal()" class="text-sm text-blue-500 hover:underline mt-2 inline-block">Close Viewer</a>
+                        <a href="#" onclick="closeModal(); return false;" class="text-sm text-blue-500 hover:underline mt-2 inline-block">Close Viewer</a>
                     </div>
                 `;
             }
@@ -856,7 +889,7 @@
         
         // Attach switchTab event listeners to buttons
         document.querySelectorAll('.tabs .tab').forEach(button => {
-            button.addEventListener('click', () => switchTab(button.getAttribute('data-tab')));
+            button.addEventListener('click', () => window.switchTab(button.getAttribute('data-tab')));
         });
     </script>
 </body>
