@@ -39,15 +39,6 @@
             opacity: 0.9;
         }
 
-        .auth-status {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 20px;
-            display: inline-block;
-            font-size: 0.9em;
-        }
-
         .stats-container {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -350,22 +341,6 @@
             50% { opacity: 0.7; }
         }
 
-        .loading {
-            text-align: center;
-            padding: 60px 20px;
-            color: white;
-            font-size: 1.2em;
-        }
-
-        .error-message {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 16px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-
         /* Modal Styles */
         .modal {
             display: none;
@@ -388,11 +363,15 @@
             background: white;
             border-radius: 12px;
             width: 90%;
-            max-width: 600px;
+            max-width: 1000px;
             max-height: 90vh;
             display: flex;
             flex-direction: column;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-content.small {
+            max-width: 600px;
         }
 
         .modal-header {
@@ -435,6 +414,57 @@
             flex: 1;
         }
 
+        .cv-viewer {
+            width: 100%;
+            min-height: 600px;
+            border: none;
+            border-radius: 8px;
+        }
+
+        .no-cv-message {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .no-cv-message svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+
+        .decline-options {
+            display: grid;
+            gap: 15px;
+        }
+
+        .decline-option {
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: left;
+        }
+
+        .decline-option:hover {
+            border-color: #ef4444;
+            background: #fef2f2;
+        }
+
+        .decline-option h3 {
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .decline-option p {
+            color: #666;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+
         @media (max-width: 1024px) {
             .card-header {
                 grid-template-columns: 1fr;
@@ -444,6 +474,19 @@
             .action-buttons {
                 justify-content: flex-start;
             }
+
+            .modal-content {
+                width: 95%;
+                max-height: 95vh;
+            }
+
+            .modal-header {
+                padding: 15px 20px;
+            }
+
+            .modal-body {
+                padding: 20px;
+            }
         }
     </style>
 </head>
@@ -452,60 +495,51 @@
         <header>
             <h1>⚡ Next Generation Utilities</h1>
             <p class="subtitle">Application Management Platform</p>
-            <div class="auth-status" id="authStatus">Connecting to Firebase...</div>
         </header>
 
-        <div id="loadingIndicator" class="loading">
-            <p>Loading applications...</p>
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-info">
+                    <h3>Pending</h3>
+                    <div class="stat-number" id="pendingCount">0</div>
+                </div>
+                <div class="stat-icon pending-icon">⏳</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <h3>Accepted</h3>
+                    <div class="stat-number" id="acceptedCount">0</div>
+                </div>
+                <div class="stat-icon accepted-icon">✓</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <h3>Declined</h3>
+                    <div class="stat-number" id="declinedCount">0</div>
+                </div>
+                <div class="stat-icon declined-icon">✕</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-info">
+                    <h3>Total Applications</h3>
+                    <div class="stat-number" id="totalCount">0</div>
+                </div>
+                <div class="stat-icon total-icon">👥</div>
+            </div>
         </div>
 
-        <div id="errorContainer"></div>
-
-        <div id="mainContent" style="display: none;">
-            <div class="stats-container">
-                <div class="stat-card">
-                    <div class="stat-info">
-                        <h3>Pending</h3>
-                        <div class="stat-number" id="pendingCount">0</div>
-                    </div>
-                    <div class="stat-icon pending-icon">⏳</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-info">
-                        <h3>Accepted</h3>
-                        <div class="stat-number" id="acceptedCount">0</div>
-                    </div>
-                    <div class="stat-icon accepted-icon">✓</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-info">
-                        <h3>Declined</h3>
-                        <div class="stat-number" id="declinedCount">0</div>
-                    </div>
-                    <div class="stat-icon declined-icon">✕</div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-info">
-                        <h3>Total Applications</h3>
-                        <div class="stat-number" id="totalCount">0</div>
-                    </div>
-                    <div class="stat-icon total-icon">👥</div>
-                </div>
+        <div class="tabs-container">
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('all')">All Applications</button>
+                <button class="tab" onclick="switchTab('pending')">Pending</button>
+                <button class="tab" onclick="switchTab('accepted')">Accepted</button>
+                <button class="tab" onclick="switchTab('declined')">Declined</button>
             </div>
 
-            <div class="tabs-container">
-                <div class="tabs">
-                    <button class="tab active" onclick="switchTab('all')">All Applications</button>
-                    <button class="tab" onclick="switchTab('pending')">Pending</button>
-                    <button class="tab" onclick="switchTab('accepted')">Accepted</button>
-                    <button class="tab" onclick="switchTab('declined')">Declined</button>
-                </div>
-
-                <div class="applications-list" id="applicationsList"></div>
-            </div>
+            <div class="applications-list" id="applicationsList"></div>
         </div>
     </div>
 
@@ -516,111 +550,84 @@
                 <h2 id="modalTitle">CV Viewer</h2>
                 <button class="close-btn" onclick="closeModal()">&times;</button>
             </div>
-            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-body" id="modalBody">
+                <!-- CV content will be loaded here -->
+            </div>
         </div>
     </div>
 
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <!-- Decline Reason Modal -->
+    <div class="modal" id="declineModal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h2>Select Decline Reason</h2>
+                <button class="close-btn" onclick="closeDeclineModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="decline-options">
+                    <div class="decline-option" id="declineAreaOption">
+                        <h3>No Work in Area</h3>
+                        <p>Applicant will receive an email stating that there is currently no work available in their location, but their details will be kept on file.</p>
+                    </div>
+                    <div class="decline-option" id="declineQualificationsOption">
+                        <h3>Insufficient Qualifications</h3>
+                        <p>Applicant will receive an email stating they do not currently hold the required accreditations needed for the role.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyvVbuEQ",
-            authDomain: "nguapplications.firebaseapp.com",
-            projectId: "nguapplications",
-            storageBucket: "nguapplications.firebasestorage.app",
-            messagingSenderId: "964264255496",
-            appId: "1:964264255496:web:05ce65f7633b95282031bd",
-            measurementId: "G-Z1YFTXW6N8"
+    <!-- EmailJS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+
+    <script>
+        // Load applications from localStorage
+        let applications = [];
+        try {
+            applications = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
+        } catch (e) {
+            console.warn('Could not load applications from localStorage');
+        }
+
+        let currentTab = 'all';
+        let pendingDeclineApp = null;
+
+        // EmailJS Configuration
+        const EMAIL_CONFIG = {
+            publicKey: 'ziLnha91scpGjFABh',
+            serviceId: 'service_2qhpxbu',
+            declineAreaTemplateId: 'template_AREA_ID',  // Replace with your template ID
+            declineQualificationsTemplateId: 'template_QUAL_ID'  // Replace with your template ID
         };
 
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        // Initialize EmailJS
+        emailjs.init(EMAIL_CONFIG.publicKey);
 
-        let applications = [];
-        let currentTab = 'all';
-        let unsubscribe = null;
+        async function sendDeclineEmail(applicant, reason) {
+            const templateId = reason === 'area' 
+                ? EMAIL_CONFIG.declineAreaTemplateId 
+                : EMAIL_CONFIG.declineQualificationsTemplateId;
 
-        const authStatusEl = document.getElementById('authStatus');
-        const loadingEl = document.getElementById('loadingIndicator');
-        const mainContentEl = document.getElementById('mainContent');
-        const errorContainerEl = document.getElementById('errorContainer');
-
-        // Show error message
-        function showError(message) {
-            errorContainerEl.innerHTML = `<div class="error-message">${message}</div>`;
-            loadingEl.style.display = 'none';
-        }
-
-        // Initialize Firebase Authentication
-        async function initAuth() {
             try {
-                authStatusEl.textContent = 'Authenticating...';
-                
-                // Sign in anonymously
-                await signInAnonymously(auth);
-                
-                // Listen for auth state changes
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        authStatusEl.textContent = '✓ Connected';
-                        authStatusEl.style.background = 'rgba(16, 185, 129, 0.3)';
-                        console.log('User authenticated:', user.uid);
-                        loadApplications();
-                    } else {
-                        authStatusEl.textContent = '✕ Not Connected';
-                        authStatusEl.style.background = 'rgba(239, 68, 68, 0.3)';
-                        showError('Authentication failed. Please refresh the page.');
+                await emailjs.send(
+                    EMAIL_CONFIG.serviceId,
+                    templateId,
+                    {
+                        to_email: applicant.email,
+                        to_name: applicant.name,
+                        position: applicant.position
                     }
-                });
+                );
+                console.log('Decline email sent successfully');
+                return true;
             } catch (error) {
-                console.error('Auth error:', error);
-                authStatusEl.textContent = '✕ Authentication Error';
-                authStatusEl.style.background = 'rgba(239, 68, 68, 0.3)';
-                showError(`Authentication error: ${error.message}`);
+                console.error('Error sending decline email:', error);
+                alert('Application declined, but email failed to send: ' + error.message);
+                return false;
             }
         }
 
-        // Load applications from Firestore
-        function loadApplications() {
-            try {
-                const applicationsRef = collection(db, 'applications');
-                const q = query(applicationsRef, orderBy('timestamp', 'desc'));
-                
-                unsubscribe = onSnapshot(q, (snapshot) => {
-                    applications = [];
-                    
-                    snapshot.forEach((doc) => {
-                        const data = doc.data();
-                        const timestamp = data.timestamp?.toDate() || new Date();
-                        
-                        applications.push({
-                            id: doc.id,
-                            ...data,
-                            date: timestamp.toLocaleDateString() + ' ' + timestamp.toLocaleTimeString()
-                        });
-                    });
-
-                    console.log('Loaded applications:', applications.length);
-                    updateStats();
-                    renderApplications();
-                    loadingEl.style.display = 'none';
-                    mainContentEl.style.display = 'block';
-                }, (error) => {
-                    console.error('Firestore error:', error);
-                    showError(`Error loading applications: ${error.message}`);
-                });
-            } catch (error) {
-                console.error('Load error:', error);
-                showError(`Error: ${error.message}`);
-            }
-        }
-
-        // Update statistics
         function updateStats() {
             const pending = applications.filter(app => app.status === 'pending').length;
             const accepted = applications.filter(app => app.status === 'accepted').length;
@@ -633,10 +640,148 @@
             document.getElementById('totalCount').textContent = total;
         }
 
-        // Render applications
+        function viewCV(id) {
+            const app = applications.find(a => a.id === id);
+            if (!app) return;
+
+            const modal = document.getElementById('cvModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalBody = document.getElementById('modalBody');
+
+            modalTitle.textContent = `CV - ${app.name}`;
+
+            if (!app.cvData || !app.cvData.data) {
+                modalBody.innerHTML = `
+                    <div class="no-cv-message">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h3>CV Not Available</h3>
+                        <p>The CV file for this application was not stored.</p>
+                        <p style="margin-top: 10px;"><strong>Filename:</strong> ${app.cv || 'Not provided'}</p>
+                    </div>
+                `;
+            } else {
+                const isPDF = app.cvData.type === 'application/pdf';
+                
+                if (isPDF) {
+                    modalBody.innerHTML = `
+                        <iframe 
+                            src="${app.cvData.data}" 
+                            class="cv-viewer"
+                            type="application/pdf"
+                        ></iframe>
+                    `;
+                } else {
+                    modalBody.innerHTML = `
+                        <div class="no-cv-message">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            <h3>${app.cvData.name}</h3>
+                            <p>This is a ${app.cvData.type} file.</p>
+                            <p style="margin-top: 10px;">Click below to download and view in your preferred application.</p>
+                            <button 
+                                class="btn btn-view-cv" 
+                                style="margin-top: 20px; padding: 12px 24px;"
+                                onclick="downloadCV(${id})"
+                            >
+                                Download CV
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+
+            modal.classList.add('show');
+        }
+
+        function downloadCV(id) {
+            const app = applications.find(a => a.id === id);
+            if (!app || !app.cvData) return;
+
+            const link = document.createElement('a');
+            link.href = app.cvData.data;
+            link.download = app.cvData.name;
+            link.click();
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('cvModal');
+            modal.classList.remove('show');
+        }
+
+        function showDeclineModal() {
+            const modal = document.getElementById('declineModal');
+            modal.classList.add('show');
+        }
+
+        function closeDeclineModal() {
+            const modal = document.getElementById('declineModal');
+            modal.classList.remove('show');
+            pendingDeclineApp = null;
+        }
+
+        async function processDecline(reason) {
+            if (!pendingDeclineApp) return;
+
+            // Update status
+            pendingDeclineApp.status = 'declined';
+            pendingDeclineApp.isNew = false;
+            pendingDeclineApp.declineReason = reason;
+            
+            saveApplications();
+            updateStats();
+            renderApplications();
+
+            // Send decline email
+            await sendDeclineEmail(pendingDeclineApp, reason);
+            
+            pendingDeclineApp = null;
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('cvModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        document.getElementById('declineModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeDeclineModal();
+            }
+        });
+
+        // Close modal with ESC key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                closeDeclineModal();
+            }
+        });
+
+        // Set up decline option click handlers
+        document.getElementById('declineAreaOption').addEventListener('click', function() {
+            closeDeclineModal();
+            processDecline('area');
+        });
+
+        document.getElementById('declineQualificationsOption').addEventListener('click', function() {
+            closeDeclineModal();
+            processDecline('qualifications');
+        });
+
         function renderApplications() {
             const container = document.getElementById('applicationsList');
             let filtered = currentTab === 'all' ? applications : applications.filter(app => app.status === currentTab);
+
+            // Sort by date (newest first) and then by ID
+            filtered.sort((a, b) => {
+                const dateCompare = new Date(b.date) - new Date(a.date);
+                if (dateCompare !== 0) return dateCompare;
+                return b.id - a.id;
+            });
 
             if (filtered.length === 0) {
                 container.innerHTML = `
@@ -652,23 +797,21 @@
             }
 
             container.innerHTML = filtered.map(app => {
-                const positionDisplay = app.position ? app.position.replace('-', ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'N/A';
-                const qualificationsHtml = app.qualifications && app.qualifications.length > 0
-                    ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
-                    : '<span class="detail-value">None listed</span>';
-
+                const isNew = app.isNew || false;
+                const positionDisplay = app.position ? app.position : 'N/A';
+                
                 return `
                 <div class="application-card">
                     <div class="card-header">
                         <div class="applicant-info">
                             <h4>
                                 ${app.name}
-                                ${app.isNew ? '<span class="new-badge">NEW</span>' : ''}
+                                ${isNew ? '<span class="new-badge">NEW</span>' : ''}
                             </h4>
-                            <p>${app.email || 'N/A'}</p>
+                            <p>${app.email}</p>
                         </div>
                         <div>
-                            <span class="position-tag ${app.position || 'smet2-engineer'}">${positionDisplay}</span>
+                            <span class="position-tag ${app.position ? app.position.toLowerCase().replace(/\s+/g, '-') : 'smet2-engineer'}">${positionDisplay}</span>
                         </div>
                         <div class="date">${app.date}</div>
                         <div>
@@ -699,81 +842,88 @@
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Qualifications</div>
-                            <div class="qualifications">${qualificationsHtml}</div>
+                            <div class="qualifications">
+                                ${app.qualifications && app.qualifications.length > 0 
+                                    ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
+                                    : '<span class="detail-value">None listed</span>'}
+                            </div>
                         </div>
                     </div>
 
                     <div class="action-buttons">
-                        ${app.cvURL ? `<button class="btn btn-view-cv" onclick="window.viewCV('${app.cvURL}', '${app.name}')">View CV</button>` : ''}
+                        ${app.cv ? `<button class="btn btn-view-cv" onclick="viewCV(${app.id})">View CV</button>` : ''}
                         ${app.status === 'pending' ? `
-                            <button class="btn btn-accept" onclick="window.updateStatus('${app.id}', 'accepted')">Accept</button>
-                            <button class="btn btn-decline" onclick="window.updateStatus('${app.id}', 'declined')">Decline</button>
+                            <button class="btn btn-accept" onclick="updateStatus(${app.id}, 'accepted')">Accept</button>
+                            <button class="btn btn-decline" onclick="updateStatus(${app.id}, 'declined')">Decline</button>
                         ` : ''}
                     </div>
                 </div>
-                `}).join('');
+            `}).join('');
         }
 
-        // Update application status
-        window.updateStatus = async function(docId, newStatus) {
-            try {
-                const docRef = doc(db, 'applications', docId);
-                await updateDoc(docRef, {
-                    status: newStatus,
-                    isNew: false
-                });
-                console.log(`Updated ${docId} to ${newStatus}`);
-            } catch (error) {
-                console.error('Update error:', error);
-                alert('Error updating status: ' + error.message);
-            }
-        };
+        function updateStatus(id, newStatus) {
+            const app = applications.find(a => a.id === id);
+            if (!app) return;
 
-        // Switch tabs
-        window.switchTab = function(tab) {
+            if (newStatus === 'declined') {
+                // Show decline reason modal
+                pendingDeclineApp = app;
+                showDeclineModal();
+            } else {
+                // Accept application directly
+                app.status = newStatus;
+                app.isNew = false;
+                saveApplications();
+                updateStats();
+                renderApplications();
+            }
+        }
+
+        function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             event.target.classList.add('active');
             renderApplications();
-        };
+        }
 
-        // View CV
-        window.viewCV = function(cvURL, name) {
-            const modal = document.getElementById('cvModal');
-            const modalTitle = document.getElementById('modalTitle');
-            const modalBody = document.getElementById('modalBody');
-
-            modalTitle.textContent = `CV - ${name}`;
-            
-            if (cvURL) {
-                modalBody.innerHTML = `
-                    <p style="text-align: center; margin-bottom: 20px;">
-                        <strong>CV File: ${name}</strong><br>
-                        <a href="${cvURL}" target="_blank" class="btn btn-view-cv" style="display: inline-block; margin-top: 10px; text-decoration: none;">
-                            Download / View CV
-                        </a>
-                    </p>
-                `;
-            } else {
-                modalBody.innerHTML = '<p style="text-align: center;">No CV available</p>';
+        function saveApplications() {
+            try {
+                window.localStorage.setItem('nguApplications', JSON.stringify(applications));
+            } catch (e) {
+                console.warn('Could not save to localStorage');
             }
+        }
 
-            modal.classList.add('show');
-        };
-
-        window.closeModal = function() {
-            document.getElementById('cvModal').classList.remove('show');
-        };
-
-        // Close modal on background click
-        document.getElementById('cvModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeModal();
+        // Listen for new applications from the form
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'nguApplications') {
+                try {
+                    applications = JSON.parse(e.newValue) || [];
+                    updateStats();
+                    renderApplications();
+                } catch (err) {
+                    console.warn('Error parsing storage event');
+                }
             }
         });
 
+        // Check for new applications every 2 seconds
+        setInterval(() => {
+            try {
+                const stored = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
+                if (stored.length > applications.length) {
+                    applications = stored;
+                    updateStats();
+                    renderApplications();
+                }
+            } catch (e) {
+                console.warn('Error checking for new applications');
+            }
+        }, 2000);
+
         // Initialize
-        initAuth();
+        updateStats();
+        renderApplications();
     </script>
 </body>
 </html>
