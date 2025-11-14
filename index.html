@@ -150,16 +150,20 @@
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 20px;
-            display: grid;
-            grid-template-columns: 2fr 1.5fr 1fr 1fr 150px;
-            gap: 15px;
-            align-items: center;
             transition: all 0.3s ease;
         }
 
         .application-card:hover {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             border-color: #667eea;
+        }
+
+        .card-header {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 150px;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 15px;
         }
 
         .applicant-info h4 {
@@ -173,7 +177,7 @@
             font-size: 0.9em;
         }
 
-        .service-tag {
+        .position-tag {
             display: inline-block;
             padding: 6px 12px;
             border-radius: 20px;
@@ -181,24 +185,14 @@
             font-weight: 500;
         }
 
-        .electricity {
+        .smet2-engineer {
             background: #fef3c7;
             color: #92400e;
         }
 
-        .water {
+        .solar-engineer {
             background: #dbeafe;
             color: #1e40af;
-        }
-
-        .gas {
-            background: #fce7f3;
-            color: #9f1239;
-        }
-
-        .internet {
-            background: #e0e7ff;
-            color: #3730a3;
         }
 
         .date {
@@ -230,9 +224,49 @@
             color: #991b1b;
         }
 
+        .card-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+
+        .detail-item {
+            font-size: 0.9em;
+        }
+
+        .detail-label {
+            color: #666;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .qualifications {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .qual-badge {
+            padding: 4px 10px;
+            background: #e0e7ff;
+            color: #3730a3;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+
         .action-buttons {
             display: flex;
             gap: 8px;
+            justify-content: flex-end;
         }
 
         .btn {
@@ -263,6 +297,15 @@
             background: #dc2626;
         }
 
+        .btn-view-cv {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-view-cv:hover {
+            background: #5568d3;
+        }
+
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -281,8 +324,25 @@
             opacity: 0.3;
         }
 
+        .new-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #10b981;
+            color: white;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            margin-left: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
         @media (max-width: 1024px) {
-            .application-card {
+            .card-header {
                 grid-template-columns: 1fr;
                 gap: 10px;
             }
@@ -347,16 +407,8 @@
     </div>
 
     <script>
-        let applications = [
-            { id: 1, name: 'John Smith', email: 'john.smith@email.com', service: 'electricity', date: '2024-11-10', status: 'pending' },
-            { id: 2, name: 'Sarah Johnson', email: 'sarah.j@email.com', service: 'water', date: '2024-11-11', status: 'pending' },
-            { id: 3, name: 'Michael Brown', email: 'm.brown@email.com', service: 'gas', date: '2024-11-09', status: 'accepted' },
-            { id: 4, name: 'Emily Davis', email: 'emily.d@email.com', service: 'electricity', date: '2024-11-08', status: 'accepted' },
-            { id: 5, name: 'David Wilson', email: 'd.wilson@email.com', service: 'internet', date: '2024-11-12', status: 'declined' },
-            { id: 6, name: 'Lisa Anderson', email: 'lisa.a@email.com', service: 'water', date: '2024-11-07', status: 'pending' },
-            { id: 7, name: 'Robert Taylor', email: 'r.taylor@email.com', service: 'gas', date: '2024-11-13', status: 'accepted' },
-            { id: 8, name: 'Jennifer White', email: 'jen.white@email.com', service: 'internet', date: '2024-11-06', status: 'declined' }
-        ];
+        // Load applications from localStorage or use sample data
+        let applications = JSON.parse(localStorage.getItem('nguApplications')) || [];
 
         let currentTab = 'all';
 
@@ -376,6 +428,13 @@
             const container = document.getElementById('applicationsList');
             let filtered = currentTab === 'all' ? applications : applications.filter(app => app.status === currentTab);
 
+            // Sort by date (newest first) and then by ID
+            filtered.sort((a, b) => {
+                const dateCompare = new Date(b.date) - new Date(a.date);
+                if (dateCompare !== 0) return dateCompare;
+                return b.id - a.id;
+            });
+
             if (filtered.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
@@ -389,33 +448,77 @@
                 return;
             }
 
-            container.innerHTML = filtered.map(app => `
+            container.innerHTML = filtered.map(app => {
+                const isNew = app.isNew || false;
+                const positionDisplay = app.position ? app.position.replace('-', ' ').split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') : 'N/A';
+                
+                return `
                 <div class="application-card">
-                    <div class="applicant-info">
-                        <h4>${app.name}</h4>
-                        <p>${app.email}</p>
+                    <div class="card-header">
+                        <div class="applicant-info">
+                            <h4>
+                                ${app.name}
+                                ${isNew ? '<span class="new-badge">NEW</span>' : ''}
+                            </h4>
+                            <p>${app.email}</p>
+                        </div>
+                        <div>
+                            <span class="position-tag ${app.position || 'smet2-engineer'}">${positionDisplay}</span>
+                        </div>
+                        <div class="date">${app.date}</div>
+                        <div>
+                            <span class="status-badge status-${app.status}">${app.status}</span>
+                        </div>
                     </div>
-                    <div>
-                        <span class="service-tag ${app.service}">${app.service.charAt(0).toUpperCase() + app.service.slice(1)}</span>
+
+                    <div class="card-details">
+                        <div class="detail-item">
+                            <div class="detail-label">Address</div>
+                            <div class="detail-value">${app.address || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">City</div>
+                            <div class="detail-value">${app.city || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Postcode</div>
+                            <div class="detail-value">${app.postcode || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Phone</div>
+                            <div class="detail-value">${app.phone || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Notice Period</div>
+                            <div class="detail-value">${app.notice || 'N/A'}</div>
+                        </div>
+                        <div class="detail-item">
+                            <div class="detail-label">Qualifications</div>
+                            <div class="qualifications">
+                                ${app.qualifications && app.qualifications.length > 0 
+                                    ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
+                                    : '<span class="detail-value">None listed</span>'}
+                            </div>
+                        </div>
                     </div>
-                    <div class="date">${app.date}</div>
-                    <div>
-                        <span class="status-badge status-${app.status}">${app.status}</span>
-                    </div>
+
                     <div class="action-buttons">
+                        ${app.cv ? `<button class="btn btn-view-cv" onclick="alert('CV: ${app.cv}')">View CV</button>` : ''}
                         ${app.status === 'pending' ? `
                             <button class="btn btn-accept" onclick="updateStatus(${app.id}, 'accepted')">Accept</button>
                             <button class="btn btn-decline" onclick="updateStatus(${app.id}, 'declined')">Decline</button>
                         ` : ''}
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         function updateStatus(id, newStatus) {
             const app = applications.find(a => a.id === id);
             if (app) {
                 app.status = newStatus;
+                app.isNew = false;
+                saveApplications();
                 updateStats();
                 renderApplications();
             }
@@ -427,6 +530,29 @@
             event.target.classList.add('active');
             renderApplications();
         }
+
+        function saveApplications() {
+            localStorage.setItem('nguApplications', JSON.stringify(applications));
+        }
+
+        // Listen for new applications from the form
+        window.addEventListener('storage', function(e) {
+            if (e.key === 'nguApplications') {
+                applications = JSON.parse(e.newValue) || [];
+                updateStats();
+                renderApplications();
+            }
+        });
+
+        // Check for new applications every 2 seconds
+        setInterval(() => {
+            const stored = JSON.parse(localStorage.getItem('nguApplications')) || [];
+            if (stored.length > applications.length) {
+                applications = stored;
+                updateStats();
+                renderApplications();
+            }
+        }, 2000);
 
         // Initialize
         updateStats();
