@@ -290,6 +290,7 @@
             <div class="error-message" id="errorMessage"></div>
 
             <form id="applicationForm">
+                <!-- Position -->
                 <div class="form-group">
                     <label for="position">Position Applying For <span class="required">*</span></label>
                     <select id="position" name="position" required>
@@ -299,36 +300,43 @@
                     </select>
                 </div>
 
+                <!-- Full Name -->
                 <div class="form-group">
                     <label for="name">Full Name <span class="required">*</span></label>
                     <input type="text" id="name" name="name" placeholder="Enter your full name" required>
                 </div>
 
+                <!-- Address Line 1 -->
                 <div class="form-group">
                     <label for="address">Address Line 1 <span class="required">*</span></label>
                     <input type="text" id="address" name="address" placeholder="Street address, P.O. box" required>
                 </div>
 
+                <!-- Town/City -->
                 <div class="form-group">
                     <label for="city">Town/City <span class="required">*</span></label>
                     <input type="text" id="city" name="city" placeholder="Enter your town or city" required>
                 </div>
 
+                <!-- Postcode -->
                 <div class="form-group">
                     <label for="postcode">Postcode <span class="required">*</span></label>
                     <input type="text" id="postcode" name="postcode" placeholder="Enter your postcode" required>
                 </div>
 
+                <!-- Email Address -->
                 <div class="form-group">
                     <label for="email">Email Address <span class="required">*</span></label>
                     <input type="email" id="email" name="email" placeholder="your.email@example.com" required>
                 </div>
 
+                <!-- Contact Number -->
                 <div class="form-group">
                     <label for="phone">Contact Number <span class="required">*</span></label>
                     <input type="tel" id="phone" name="phone" placeholder="+44 7XXX XXXXXX" required>
                 </div>
 
+                <!-- CV Upload -->
                 <div class="form-group">
                     <label for="cv">Upload CV <span class="required">*</span></label>
                     <div class="file-upload-wrapper">
@@ -343,11 +351,13 @@
                     <div class="file-name" id="fileName"></div>
                 </div>
 
+                <!-- Notice Period -->
                 <div class="form-group">
                     <label for="notice">Notice Period <span class="required">*</span></label>
                     <input type="text" id="notice" name="notice" placeholder="e.g., 2 weeks, 1 month, Immediate" required>
                 </div>
 
+                <!-- Qualifications -->
                 <div class="form-group">
                     <label>Qualifications <span class="required">*</span></label>
                     <div class="qualifications-group">
@@ -371,10 +381,65 @@
         </div>
     </div>
 
-    <!-- EmailJS SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-    
-    <script>
+    <!-- Firebase and EmailJS SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        
+        // Load EmailJS Library
+        const emailJsScript = document.createElement('script');
+        emailJsScript.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js";
+        document.head.appendChild(emailJsScript);
+
+        // ============================================
+        // FIREBASE SETUP (MANDATORY ENVIRONMENT VARIABLES)
+        // ============================================
+        // NOTE: The Firebase configuration below MUST use the global environment variables 
+        // provided by the Canvas environment for security and runtime access.
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        // Use the user's provided config for structure, even though it comes from the global variable
+        const firebaseConfig = {
+            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyvVbuEQ",
+            authDomain: "nguapplications.firebaseapp.com",
+            projectId: "nguapplications",
+            storageBucket: "nguapplications.appspot.com", // Changed to .appspot.com for Firebase Storage
+            messagingSenderId: "964264255496",
+            appId: "1:964264255496:web:05ce65f7633b95282031bd",
+            measurementId: "G-Z1YFTXW6N8"
+        };
+        
+        // Initialize Firebase services
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const storage = getStorage(app);
+        const auth = getAuth(app);
+        
+        // Set Firebase logging level (optional, helpful for debugging)
+        setLogLevel('debug');
+        
+        // Authentication must complete before Firestore operations begin
+        let userId = null;
+        
+        async function authenticateUser() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    const userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                    userId = userCredential.user.uid;
+                } else {
+                    const userCredential = await signInAnonymously(auth);
+                    userId = userCredential.user.uid;
+                }
+                console.log("Firebase Auth Successful. User ID:", userId);
+            } catch (error) {
+                console.error("Firebase Authentication Error:", error);
+                // Fallback: use a random ID if auth fails entirely
+                userId = crypto.randomUUID(); 
+            }
+        }
+        
         // ============================================
         // EMAIL CONFIGURATION
         // ============================================
@@ -385,62 +450,105 @@
             adminTemplateId: 'template_rdg2zp9'
         };
 
-        // Initialize EmailJS
-        emailjs.init(EMAIL_CONFIG.publicKey);
+        // ============================================
+        // FIREBASE FUNCTIONS
+        // ============================================
 
-        // File upload handling
-        const fileInput = document.getElementById('cv');
-        const fileNameDisplay = document.getElementById('fileName');
+        /**
+         * Uploads the CV file to Firebase Storage.
+         * @param {File} file The CV file object.
+         * @param {string} name Applicant's full name.
+         * @param {string} position Position applied for.
+         * @returns {Promise<string|null>} The public download URL for the file, or null if no file.
+         */
+        async function uploadCV(file, name, position) {
+            if (!file) return null;
 
-        fileInput.addEventListener('change', function(e) {
-            if (this.files && this.files[0]) {
-                const fileName = this.files[0].name;
-                fileNameDisplay.textContent = `✓ ${fileName}`;
-                fileNameDisplay.classList.add('show');
-            } else {
-                fileNameDisplay.classList.remove('show');
-            }
-        });
+            // Create a unique, readable path in Storage: artifacts/{appId}/public/files/applications/{position}/{timestamp_name.ext}
+            const timestamp = Date.now();
+            const safeName = name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+            const safePosition = position.replace(/\s/g, '_');
+            const fileExtension = file.name.split('.').pop();
+            const fileName = `${timestamp}_${safeName}.${fileExtension}`;
+            
+            // Storage path (using the public artifacts path structure)
+            const storagePath = `artifacts/${appId}/public/files/applications/${safePosition}/${fileName}`;
+            const storageReference = ref(storage, storagePath);
 
-        // Form submission
-        const form = document.getElementById('applicationForm');
-        const successMessage = document.getElementById('successMessage');
-        const errorMessage = document.getElementById('errorMessage');
-        const submitBtn = document.getElementById('submitBtn');
+            console.log("Uploading file to:", storagePath);
+            await uploadBytes(storageReference, file);
+            
+            const downloadURL = await getDownloadURL(storageReference);
+            return downloadURL;
+        }
 
+        /**
+         * Saves application data and CV link to Firestore.
+         * @param {object} data The application data object.
+         * @returns {Promise<string>} The ID of the new Firestore document.
+         */
+        async function saveApplicationToFirestore(data) {
+            // Remove the base64 CV data before saving to Firestore (1MB limit)
+            const dataToSave = { ...data };
+            delete dataToSave.cvData; 
+            
+            // Firestore Collection Path (Public data for Admin to access)
+            const collectionPath = `artifacts/${appId}/public/data/applications`;
+            const applicationsCollection = collection(db, collectionPath);
+
+            const docRef = await addDoc(applicationsCollection, {
+                ...dataToSave,
+                timestamp: serverTimestamp(), // Use Firestore Server Timestamp
+                userId: userId // Store the ID of the user who submitted the form
+            });
+            
+            console.log("Application saved to Firestore with ID:", docRef.id);
+            return docRef.id;
+        }
+
+        /**
+         * Sends confirmation and admin emails using EmailJS.
+         * @param {object} applicationData All form data, including the cvURL.
+         * @returns {Promise<string[]>} Array of failed email types ('applicant', 'admin').
+         */
         async function sendEmails(applicationData) {
+            // Wait for EmailJS to load
+            if (typeof emailjs === 'undefined') {
+                console.error("EmailJS not loaded.");
+                return ['EmailJS failed to load'];
+            }
+            
+            emailjs.init(EMAIL_CONFIG.publicKey);
             const errors = [];
+            const { name, email, position, cv, qualifications, notice, cvURL } = applicationData;
 
-            // Send email to applicant
+            // 1. Send email to applicant
             try {
                 await emailjs.send(
                     EMAIL_CONFIG.serviceId,
                     EMAIL_CONFIG.applicantTemplateId,
-                    {
-                        to_email: applicationData.email,
-                        to_name: applicationData.name,
-                        position: applicationData.position
-                    }
+                    { to_email: email, to_name: name, position: position }
                 );
             } catch (error) {
                 console.error('Error sending applicant email:', error);
                 errors.push('applicant');
             }
 
-            // Send email to Barry
+            // 2. Send email to Admin (Barry)
             try {
                 await emailjs.send(
                     EMAIL_CONFIG.serviceId,
                     EMAIL_CONFIG.adminTemplateId,
                     {
                         to_email: 'barry.dixon@next.gen.uk',
-                        applicant_name: applicationData.name,
-                        position: applicationData.position,
-                        applicant_email: applicationData.email,
+                        applicant_name: name,
+                        position: position,
+                        applicant_email: email,
                         applicant_phone: applicationData.phone,
-                        cv_name: applicationData.cv,
-                        qualifications: applicationData.qualifications.join(', '),
-                        notice_period: applicationData.notice
+                        cv_name: cv,
+                        qualifications: qualifications.join(', '),
+                        notice_period: notice,
+                        cv_link: cvURL || 'No CV uploaded or upload failed.', // Pass the CV URL
                     }
                 );
             } catch (error) {
@@ -451,40 +559,59 @@
             return errors;
         }
 
+        // ============================================
+        // FORM LOGIC
+        // ============================================
+
+        const form = document.getElementById('applicationForm');
+        const fileInput = document.getElementById('cv');
+        const fileNameDisplay = document.getElementById('fileName');
+        const successMessage = document.getElementById('successMessage');
+        const errorMessage = document.getElementById('errorMessage');
+        const submitBtn = document.getElementById('submitBtn');
+
+        // File name display listener
+        fileInput.addEventListener('change', function(e) {
+            if (this.files && this.files[0]) {
+                fileNameDisplay.textContent = `✓ ${this.files[0].name}`;
+                fileNameDisplay.classList.add('show');
+            } else {
+                fileNameDisplay.classList.remove('show');
+            }
+        });
+
+        // Postcode formatting listener
+        const postcodeInput = document.getElementById('postcode');
+        postcodeInput.addEventListener('blur', function() {
+            this.value = this.value.toUpperCase().trim();
+        });
+
+        // Form submission handler
         form.addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            // Check authentication status first
+            if (!userId) {
+                await authenticateUser();
+            }
 
             // Check if at least one qualification is selected
             const qualifications = document.querySelectorAll('input[name="qualifications"]:checked');
             if (qualifications.length === 0) {
-                errorMessage.textContent = '⚠️ Please select at least one qualification';
+                errorMessage.textContent = '⚠️ Please select at least one qualification.';
                 errorMessage.classList.add('show');
                 setTimeout(() => errorMessage.classList.remove('show'), 5000);
                 return;
             }
 
-            // Disable submit button
+            // Disable button and show loading state
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Submitting...';
+            submitBtn.textContent = 'Submitting... Please wait.';
+            errorMessage.classList.remove('show');
+            successMessage.classList.remove('show');
 
-            // Collect form data
             const formData = new FormData(form);
-            
-            // Convert CV to base64
-            let cvData = null;
-            if (fileInput.files[0]) {
-                const file = fileInput.files[0];
-                cvData = {
-                    name: file.name,
-                    type: file.type,
-                    data: await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    })
-                };
-            }
+            const cvFile = fileInput.files[0];
             
             const applicationData = {
                 position: formData.get('position'),
@@ -494,34 +621,34 @@
                 postcode: formData.get('postcode'),
                 email: formData.get('email'),
                 phone: formData.get('phone'),
-                cv: fileInput.files[0]?.name || '',
-                cvData: cvData,
+                cv: cvFile?.name || 'No File Uploaded',
                 notice: formData.get('notice'),
                 qualifications: Array.from(qualifications).map(q => q.value),
-                date: new Date().toISOString().split('T')[0],
                 status: 'pending'
             };
 
-            // Send emails
-            const emailErrors = await sendEmails(applicationData);
-
-            // Store application data
-            let applications = [];
-            try {
-                const stored = window.localStorage.getItem('nguApplications');
-                applications = stored ? JSON.parse(stored) : [];
-            } catch (e) {
-                console.warn('localStorage not available, using session storage');
-            }
-
-            const maxId = applications.length > 0 ? Math.max(...applications.map(app => app.id || 0)) : 0;
-            applicationData.id = maxId + 1;
-            applications.push(applicationData);
+            let firestoreID = null;
+            let cvURL = null;
+            let errors = [];
 
             try {
-                window.localStorage.setItem('nguApplications', JSON.stringify(applications));
-            } catch (e) {
-                console.warn('Could not save to localStorage');
+                // 1. Upload CV to Firebase Storage
+                cvURL = await uploadCV(cvFile, applicationData.name, applicationData.position);
+                applicationData.cvURL = cvURL; // Add the storage URL
+
+                // 2. Save Data to Firestore (pass data including cvURL)
+                firestoreID = await saveApplicationToFirestore(applicationData);
+                applicationData.applicationId = firestoreID; 
+
+                // 3. Send Emails
+                const emailErrors = await sendEmails(applicationData);
+                errors = emailErrors;
+                
+            } catch (error) {
+                console.error('Submission Failed:', error);
+                errors.push('Firebase/Storage');
+                errorMessage.textContent = `❌ An unrecoverable error occurred during submission. Details: ${error.message}`;
+                errorMessage.classList.add('show');
             }
 
             // Re-enable submit button
@@ -529,24 +656,22 @@
             submitBtn.textContent = 'Submit Application';
 
             // Show result message
-            if (emailErrors.length === 0) {
+            if (errors.length === 0 && firestoreID) {
+                successMessage.textContent = `✓ Application submitted successfully! Application ID: ${firestoreID}. Confirmation emails have been sent.`;
                 successMessage.classList.add('show');
                 form.reset();
                 fileNameDisplay.classList.remove('show');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
-                setTimeout(() => successMessage.classList.remove('show'), 5000);
-            } else {
-                errorMessage.textContent = `⚠️ Application saved but some emails failed to send. Please contact recruitment@next.gen.uk`;
+                setTimeout(() => successMessage.classList.remove('show'), 8000);
+            } else if (errors.length > 0) {
+                errorMessage.textContent = `⚠️ Application data saved (ID: ${firestoreID || 'N/A'}) but some emails failed (${errors.join(', ')}). Please contact recruitment@next.gen.uk`;
                 errorMessage.classList.add('show');
-                setTimeout(() => errorMessage.classList.remove('show'), 8000);
+                setTimeout(() => errorMessage.classList.remove('show'), 10000);
             }
         });
-
-        // Postcode formatting
-        const postcodeInput = document.getElementById('postcode');
-        postcodeInput.addEventListener('blur', function() {
-            this.value = this.value.toUpperCase().trim();
-        });
+        
+        // Start authentication immediately on load
+        authenticateUser();
     </script>
 </body>
 </html>
