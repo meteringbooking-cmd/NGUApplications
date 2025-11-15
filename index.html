@@ -448,11 +448,27 @@
             flex: 1;
         }
 
-        .cv-viewer {
+        .cv-viewer-frame {
             width: 100%;
-            min-height: 600px;
-            border: none;
+            height: 600px;
+            border: 1px solid #e5e7eb;
             border-radius: 8px;
+        }
+
+        .cv-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .btn-download {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-download:hover {
+            background: #059669;
         }
 
         .no-cv-message {
@@ -507,19 +523,6 @@
 
             .action-buttons {
                 justify-content: flex-start;
-            }
-
-            .modal-content {
-                width: 95%;
-                max-height: 95vh;
-            }
-
-            .modal-header {
-                padding: 15px 20px;
-            }
-
-            .modal-body {
-                padding: 20px;
             }
         }
     </style>
@@ -577,6 +580,7 @@
         </div>
     </div>
 
+    <!-- CV Modal -->
     <div class="modal" id="cvModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -587,6 +591,7 @@
         </div>
     </div>
 
+    <!-- Decline Modal -->
     <div class="modal" id="declineModal">
         <div class="modal-content small">
             <div class="modal-header">
@@ -608,6 +613,7 @@
         </div>
     </div>
 
+    <!-- Contract Modal -->
     <div class="modal" id="contractModal">
         <div class="modal-content small">
             <div class="modal-header">
@@ -640,8 +646,6 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
-
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
@@ -650,7 +654,7 @@
             apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyvVbuEQ",
             authDomain: "nguapplications.firebaseapp.com",
             projectId: "nguapplications",
-            storageBucket: "nguapplications.firebasestorage.app",
+            storageBucket: "nguapplications.appspot.com",
             messagingSenderId: "964264255496",
             appId: "1:964264255496:web:05ce65f7633b95282031bd"
         };
@@ -663,39 +667,27 @@
         let pendingDeclineApp = null;
         let pendingContractApp = null;
 
-        const EMAIL_CONFIG = {
-            publicKey: 'ziLnha91scpGjFABh',
-            serviceId: 'service_2qhpxbu',
-            declineAreaTemplateId: 'template_AREA_ID',
-            declineQualificationsTemplateId: 'template_QUAL_ID'
-        };
+        const TEAMS_WEBHOOK = 'https://nextgenerationutilities.webhook.office.com/webhookb2/b6114c26-5b1e-48fe-b43d-e0b6e16b62bc@e8166c8d-8eb6-4a45-8857-9b378ad38b57/IncomingWebhook/4af291ab40d348e1ab4e05fe8835a4bd/c7d64763-ac4d-4982-8bb0-4c9649cc20e7/V2in_LUKE6z9BiS5uByT_QjpaY5SyAPpqEITYr-UxqjkQ1';
 
-        const TEAMS_WEBHOOK = 'https://nextgenerationutilities.webhook.office.com/webhookb2/b6114c26-5b1e-48fe-b43d-e0b6e16b62bc@e8166c8d-8eb6-4a45-8857-9b378ad38b57/IncomingWebhook/ec872dc53a9d48898aaaca5d55a0e5f2/c7d64763-ac4d-4982-8bb0-4c9649cc20e7/V2doZ2Hvoz4lrNzask1bZD6-uShY7d6HV9DfCkwqVYneE1';
-
-        emailjs.init(EMAIL_CONFIG.publicKey);
-
+        // Load applications
         const q = query(collection(db, 'applications'), orderBy('timestamp', 'desc'));
         onSnapshot(q, (snapshot) => {
             applications = [];
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
                 const timestamp = data.timestamp?.toDate() || new Date();
-                
-                // UK date format: DD/MM/YYYY HH:MM
                 const day = String(timestamp.getDate()).padStart(2, '0');
                 const month = String(timestamp.getMonth() + 1).padStart(2, '0');
                 const year = timestamp.getFullYear();
                 const hours = String(timestamp.getHours()).padStart(2, '0');
                 const minutes = String(timestamp.getMinutes()).padStart(2, '0');
-                const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`;
                 
                 applications.push({
                     firestoreId: docSnap.id,
                     ...data,
-                    date: formattedDate
+                    date: `${day}/${month}/${year} ${hours}:${minutes}`
                 });
             });
-            console.log('Loaded', applications.length, 'applications');
             updateStats();
             renderApplications();
         });
@@ -710,48 +702,34 @@
             document.getElementById('totalCount').textContent = applications.length;
         }
 
-        window.viewCV = function(firestoreId) {
-            const app = applications.find(a => a.firestoreId === firestoreId);
-            if (!app) return;
+        window.viewCV = function(cvURL, name) {
             const modal = document.getElementById('cvModal');
             const modalTitle = document.getElementById('modalTitle');
             const modalBody = document.getElementById('modalBody');
-            modalTitle.textContent = `CV - ${app.name}`;
-
-            if (!app.cvData || !app.cvData.data) {
+            modalTitle.textContent = `CV - ${name}`;
+            
+            if (cvURL) {
+                const fileExt = cvURL.split('.').pop().toLowerCase().split('?')[0];
+                const isPDF = fileExt === 'pdf';
+                
                 modalBody.innerHTML = `
-                    <div class="no-cv-message">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                        </svg>
-                        <h3>CV Not Available</h3>
-                        <p>Filename: ${app.cv || 'Not provided'}</p>
+                    <div class="cv-actions">
+                        <a href="${cvURL}" target="_blank" class="btn btn-view-cv" style="text-decoration: none;">
+                            Open in New Tab
+                        </a>
+                        <a href="${cvURL}" download class="btn btn-download" style="text-decoration: none;">
+                            Download CV
+                        </a>
                     </div>
+                    ${isPDF ? `<iframe src="${cvURL}" class="cv-viewer-frame" frameborder="0"></iframe>` : 
+                    `<div style="text-align: center; padding: 40px;">
+                        <p>Preview not available for this file type. Use buttons above to view or download.</p>
+                    </div>`}
                 `;
             } else {
-                const isPDF = app.cvData.type === 'application/pdf';
-                if (isPDF) {
-                    modalBody.innerHTML = `<iframe src="${app.cvData.data}" class="cv-viewer"></iframe>`;
-                } else {
-                    modalBody.innerHTML = `
-                        <div class="no-cv-message">
-                            <h3>${app.cvData.name}</h3>
-                            <p>${app.cvData.type}</p>
-                            <button class="btn btn-view-cv" style="margin-top: 20px;" onclick="downloadCV('${app.firestoreId}')">Download</button>
-                        </div>
-                    `;
-                }
+                modalBody.innerHTML = '<div class="no-cv-message"><p>No CV available</p></div>';
             }
             modal.classList.add('show');
-        };
-
-        window.downloadCV = function(firestoreId) {
-            const app = applications.find(a => a.firestoreId === firestoreId);
-            if (!app?.cvData) return;
-            const link = document.createElement('a');
-            link.href = app.cvData.data;
-            link.download = app.cvData.name;
-            link.click();
         };
 
         window.showPreviousContract = function(firestoreId) {
@@ -780,30 +758,69 @@
 
         window.submitOtherContract = function() {
             const val = document.getElementById('otherContractText').value.trim();
-            if (!val) return alert('Enter contract name');
+            if (!val) return alert('Please enter a contract name');
             selectContract(`Other: ${val}`);
         };
 
         window.sendNameCheck = async function(firestoreId) {
             const app = applications.find(a => a.firestoreId === firestoreId);
             if (!app) return;
+            
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Sending...';
+            
             try {
-                const response = await fetch(TEAMS_WEBHOOK, {
+                const payload = {
+                    "@type": "MessageCard",
+                    "@context": "https://schema.org/extensions",
+                    "summary": "Name Check Request",
+                    "themeColor": "0078D4",
+                    "title": "🔍 Name Check Request",
+                    "sections": [{
+                        "activityTitle": "New Name Check Required",
+                        "activitySubtitle": new Date().toLocaleString('en-GB'),
+                        "facts": [
+                            {"name": "Applicant Name:", "value": app.name},
+                            {"name": "Position:", "value": app.position || 'N/A'},
+                            {"name": "Email:", "value": app.email || 'N/A'},
+                            {"name": "Phone:", "value": app.phone || 'N/A'},
+                            {"name": "City:", "value": app.city || 'N/A'},
+                            {"name": "Postcode:", "value": app.postcode || 'N/A'}
+                        ]
+                    }]
+                };
+
+                await fetch(TEAMS_WEBHOOK, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        "@type": "MessageCard",
-                        "summary": "Name Check",
-                        "sections": [{
-                            "activityTitle": "Name Check Request",
-                            "facts": [{"name": "Applicant:", "value": app.name}]
-                        }]
-                    })
+                    body: JSON.stringify(payload),
+                    mode: 'no-cors'
                 });
-                if (response.ok) alert(`Sent to Teams: ${app.name}`);
-                else throw new Error('Failed');
+
+                btn.textContent = '✓ Sent';
+                btn.style.background = '#10b981';
+                
+                await updateDoc(doc(db, 'applications', firestoreId), {
+                    nameCheckSent: true,
+                    nameCheckDate: new Date().toISOString()
+                });
+                
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    btn.style.background = '';
+                }, 2000);
+                
             } catch (error) {
-                alert('Teams error: ' + error.message);
+                btn.textContent = '✗ Failed';
+                btn.style.background = '#ef4444';
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    btn.style.background = '';
+                }, 3000);
             }
         };
 
@@ -821,12 +838,6 @@
                     isNew: false,
                     declineReason: reason
                 });
-                const templateId = reason === 'area' ? EMAIL_CONFIG.declineAreaTemplateId : EMAIL_CONFIG.declineQualificationsTemplateId;
-                await emailjs.send(EMAIL_CONFIG.serviceId, templateId, {
-                    to_email: pendingDeclineApp.email,
-                    to_name: pendingDeclineApp.name,
-                    position: pendingDeclineApp.position
-                });
                 closeModal('declineModal');
             } catch (error) {
                 alert('Error: ' + error.message);
@@ -838,80 +849,40 @@
             let filtered = currentTab === 'all' ? applications : applications.filter(app => app.status === currentTab);
 
             if (filtered.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-state">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-                        </svg>
-                        <h3>No applications found</h3>
-                    </div>
-                `;
+                container.innerHTML = `<div class="empty-state"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg><h3>No applications found</h3></div>`;
                 return;
             }
 
             container.innerHTML = filtered.map(app => {
                 const contractInfo = app.previousContract ? `<span class="previous-contract-info">${app.previousContract}</span>` : '';
-                
-                // All possible qualifications
-                const allQuals = ['EUSR', 'Gas Cert', 'Diploma'];
-                const userQuals = (app.qualifications || []).map(q => q.toUpperCase());
-                
-                // Create badges for all qualifications (green if they have it, red if they don't)
+                const allQuals = ['EUSR', 'GAS-CERT', 'DIPLOMA'];
+                const userQuals = (app.qualifications || []).map(q => q.toUpperCase().replace(' ', '-'));
                 const qualBadges = allQuals.map(qual => {
-                    const hasQual = userQuals.some(uq => uq === qual.toUpperCase().replace(' ', ' '));
-                    const badgeClass = hasQual ? 'qual-badge' : 'qual-badge missing';
-                    return `<span class="${badgeClass}">${qual.toUpperCase()}</span>`;
+                    const hasQual = userQuals.includes(qual);
+                    return `<span class="qual-badge ${hasQual ? '' : 'missing'}">${qual.replace('-', ' ')}</span>`;
                 }).join('');
                 
                 return `
                 <div class="application-card">
                     <div class="card-header">
                         <div class="applicant-info">
-                            <h4>
-                                ${app.name}
-                                ${app.isNew ? '<span class="new-badge">NEW</span>' : ''}
-                                ${contractInfo}
-                            </h4>
+                            <h4>${app.name}${app.isNew ? '<span class="new-badge">NEW</span>' : ''}${contractInfo}</h4>
                             <p>${app.email}</p>
                         </div>
-                        <div>
-                            <span class="position-tag ${app.position?.toLowerCase().replace(/\s+/g, '-') || 'smet2-engineer'}">${app.position || 'N/A'}</span>
-                        </div>
+                        <div><span class="position-tag ${app.position?.toLowerCase().replace(/\s+/g, '-') || 'smet2-engineer'}">${app.position || 'N/A'}</span></div>
                         <div class="date">${app.date}</div>
-                        <div>
-                            <span class="status-badge status-${app.status}">${app.status}</span>
-                        </div>
+                        <div><span class="status-badge status-${app.status}">${app.status}</span></div>
                     </div>
-
                     <div class="card-details">
-                        <div class="detail-item">
-                            <div class="detail-label">Address</div>
-                            <div class="detail-value">${app.address || 'N/A'}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">City</div>
-                            <div class="detail-value">${app.city || 'N/A'}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Postcode</div>
-                            <div class="detail-value">${app.postcode || 'N/A'}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Phone</div>
-                            <div class="detail-value">${app.phone || 'N/A'}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Notice Period</div>
-                            <div class="detail-value">${app.notice || 'N/A'}</div>
-                        </div>
-                        <div class="detail-item">
-                            <div class="detail-label">Qualifications</div>
-                            <div class="qualifications">${qualBadges}</div>
-                        </div>
+                        <div class="detail-item"><div class="detail-label">Address</div><div class="detail-value">${app.address || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">City</div><div class="detail-value">${app.city || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Postcode</div><div class="detail-value">${app.postcode || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Phone</div><div class="detail-value">${app.phone || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Notice Period</div><div class="detail-value">${app.notice || 'N/A'}</div></div>
+                        <div class="detail-item"><div class="detail-label">Qualifications</div><div class="qualifications">${qualBadges}</div></div>
                     </div>
-
                     <div class="action-buttons">
-                        ${app.cv ? `<button class="btn btn-view-cv" onclick="viewCV('${app.firestoreId}')">View CV</button>` : ''}
+                        ${app.cvURL ? `<button class="btn btn-view-cv" onclick="viewCV('${app.cvURL}', '${app.name}')">View CV</button>` : ''}
                         <button class="btn btn-previous-contract" onclick="showPreviousContract('${app.firestoreId}')">Previous Contract</button>
                         <button class="btn btn-name-check" onclick="sendNameCheck('${app.firestoreId}')">Name Check</button>
                         ${app.status === 'pending' ? `
@@ -919,8 +890,8 @@
                             <button class="btn btn-decline" onclick="updateStatus('${app.firestoreId}', 'declined')">Decline</button>
                         ` : ''}
                     </div>
-                </div>
-            `}).join('');
+                </div>`;
+            }).join('');
         }
 
         window.updateStatus = async function(firestoreId, newStatus) {
@@ -951,7 +922,7 @@
 
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('modal')) {
-                e.target.classList.remove('show');
+                closeModal(e.target.id);
             }
         });
 
