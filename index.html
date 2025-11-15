@@ -263,6 +263,11 @@
             font-weight: 500;
         }
 
+        .qual-badge.missing {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
         .previous-contract-info {
             display: inline-block;
             padding: 4px 10px;
@@ -669,17 +674,25 @@
 
         emailjs.init(EMAIL_CONFIG.publicKey);
 
-        // Load from Firestore
         const q = query(collection(db, 'applications'), orderBy('timestamp', 'desc'));
         onSnapshot(q, (snapshot) => {
             applications = [];
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
                 const timestamp = data.timestamp?.toDate() || new Date();
+                
+                // UK date format: DD/MM/YYYY HH:MM
+                const day = String(timestamp.getDate()).padStart(2, '0');
+                const month = String(timestamp.getMonth() + 1).padStart(2, '0');
+                const year = timestamp.getFullYear();
+                const hours = String(timestamp.getHours()).padStart(2, '0');
+                const minutes = String(timestamp.getMinutes()).padStart(2, '0');
+                const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`;
+                
                 applications.push({
                     firestoreId: docSnap.id,
                     ...data,
-                    date: timestamp.toLocaleDateString() + ' ' + timestamp.toLocaleTimeString()
+                    date: formattedDate
                 });
             });
             console.log('Loaded', applications.length, 'applications');
@@ -838,6 +851,18 @@
 
             container.innerHTML = filtered.map(app => {
                 const contractInfo = app.previousContract ? `<span class="previous-contract-info">${app.previousContract}</span>` : '';
+                
+                // All possible qualifications
+                const allQuals = ['EUSR', 'Gas Cert', 'Diploma'];
+                const userQuals = (app.qualifications || []).map(q => q.toUpperCase());
+                
+                // Create badges for all qualifications (green if they have it, red if they don't)
+                const qualBadges = allQuals.map(qual => {
+                    const hasQual = userQuals.some(uq => uq === qual.toUpperCase().replace(' ', ' '));
+                    const badgeClass = hasQual ? 'qual-badge' : 'qual-badge missing';
+                    return `<span class="${badgeClass}">${qual.toUpperCase()}</span>`;
+                }).join('');
+                
                 return `
                 <div class="application-card">
                     <div class="card-header">
@@ -881,11 +906,7 @@
                         </div>
                         <div class="detail-item">
                             <div class="detail-label">Qualifications</div>
-                            <div class="qualifications">
-                                ${app.qualifications?.length > 0 
-                                    ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
-                                    : '<span class="detail-value">None</span>'}
-                            </div>
+                            <div class="qualifications">${qualBadges}</div>
                         </div>
                     </div>
 
