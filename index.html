@@ -882,7 +882,7 @@
                         <div class="detail-item"><div class="detail-label">Qualifications</div><div class="qualifications">${qualBadges}</div></div>
                     </div>
                     <div class="action-buttons">
-                        ${app.cvURL ? `<button class="btn btn-view-cv" onclick="viewCV('${app.cvURL}', '${app.name}')">View CV</button>` : ''}
+                        <button class="btn btn-view-cv" onclick="viewCV('${app.cvURL || ''}', '${app.name}')">View CV</button>
                         <button class="btn btn-previous-contract" onclick="showPreviousContract('${app.firestoreId}')">Previous Contract</button>
                         <button class="btn btn-name-check" onclick="sendNameCheck('${app.firestoreId}')">Name Check</button>
                         ${app.status === 'pending' ? `
