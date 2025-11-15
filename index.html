@@ -371,7 +371,6 @@
             50% { opacity: 0.7; }
         }
 
-        /* Modal Styles */
         .modal {
             display: none;
             position: fixed;
@@ -573,7 +572,6 @@
         </div>
     </div>
 
-    <!-- CV Viewer Modal -->
     <div class="modal" id="cvModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -584,7 +582,6 @@
         </div>
     </div>
 
-    <!-- Decline Reason Modal -->
     <div class="modal" id="declineModal">
         <div class="modal-content small">
             <div class="modal-header">
@@ -592,21 +589,20 @@
                 <button class="close-btn" onclick="closeModal('declineModal')">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="decline-options" id="declineOptions">
+                <div class="decline-options">
                     <div class="decline-option" onclick="processDecline('area')">
                         <h3>No Work in Area</h3>
-                        <p>Applicant will receive an email stating that there is currently no work available in their location, but their details will be kept on file.</p>
+                        <p>Applicant will receive an email stating that there is currently no work available in their location.</p>
                     </div>
                     <div class="decline-option" onclick="processDecline('qualifications')">
                         <h3>Insufficient Qualifications</h3>
-                        <p>Applicant will receive an email stating they do not currently hold the required accreditations needed for the role.</p>
+                        <p>Applicant will receive an email stating they do not currently hold the required accreditations.</p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Previous Contract Modal -->
     <div class="modal" id="contractModal">
         <div class="modal-content small">
             <div class="modal-header">
@@ -639,23 +635,29 @@
         </div>
     </div>
 
-    <!-- EmailJS SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 
-    <script>
-        // Load applications
-        let applications = [];
-        try {
-            applications = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
-        } catch (e) {
-            console.warn('Could not load applications');
-        }
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+        const firebaseConfig = {
+            apiKey: "AIzaSyCa1yGcu7VzYqWFmcRfRM2G_LgPyvVbuEQ",
+            authDomain: "nguapplications.firebaseapp.com",
+            projectId: "nguapplications",
+            storageBucket: "nguapplications.firebasestorage.app",
+            messagingSenderId: "964264255496",
+            appId: "1:964264255496:web:05ce65f7633b95282031bd"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        let applications = [];
         let currentTab = 'all';
         let pendingDeclineApp = null;
         let pendingContractApp = null;
 
-        // EmailJS Configuration
         const EMAIL_CONFIG = {
             publicKey: 'ziLnha91scpGjFABh',
             serviceId: 'service_2qhpxbu',
@@ -663,94 +665,44 @@
             declineQualificationsTemplateId: 'template_QUAL_ID'
         };
 
-        // Teams Webhook URL
         const TEAMS_WEBHOOK = 'https://nextgenerationutilities.webhook.office.com/webhookb2/b6114c26-5b1e-48fe-b43d-e0b6e16b62bc@e8166c8d-8eb6-4a45-8857-9b378ad38b57/IncomingWebhook/ec872dc53a9d48898aaaca5d55a0e5f2/c7d64763-ac4d-4982-8bb0-4c9649cc20e7/V2doZ2Hvoz4lrNzask1bZD6-uShY7d6HV9DfCkwqVYneE1';
 
         emailjs.init(EMAIL_CONFIG.publicKey);
 
-        async function sendDeclineEmail(applicant, reason) {
-            const templateId = reason === 'area' 
-                ? EMAIL_CONFIG.declineAreaTemplateId 
-                : EMAIL_CONFIG.declineQualificationsTemplateId;
-
-            try {
-                await emailjs.send(
-                    EMAIL_CONFIG.serviceId,
-                    templateId,
-                    {
-                        to_email: applicant.email,
-                        to_name: applicant.name,
-                        position: applicant.position
-                    }
-                );
-                console.log('Decline email sent');
-                return true;
-            } catch (error) {
-                console.error('Email error:', error);
-                alert('Application declined, but email failed: ' + error.message);
-                return false;
-            }
-        }
-
-        async function sendTeamsNotification(applicantName) {
-            const message = {
-                "@type": "MessageCard",
-                "@context": "http://schema.org/extensions",
-                "themeColor": "0076D7",
-                "summary": "Name Check Request",
-                "sections": [{
-                    "activityTitle": "Name Check Request",
-                    "activitySubtitle": "New applicant needs verification",
-                    "facts": [{
-                        "name": "Applicant Name:",
-                        "value": applicantName
-                    }],
-                    "markdown": true
-                }]
-            };
-
-            try {
-                const response = await fetch(TEAMS_WEBHOOK, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(message)
+        // Load from Firestore
+        const q = query(collection(db, 'applications'), orderBy('timestamp', 'desc'));
+        onSnapshot(q, (snapshot) => {
+            applications = [];
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const timestamp = data.timestamp?.toDate() || new Date();
+                applications.push({
+                    firestoreId: docSnap.id,
+                    ...data,
+                    date: timestamp.toLocaleDateString() + ' ' + timestamp.toLocaleTimeString()
                 });
-
-                if (response.ok) {
-                    alert(`Name check sent to Teams for: ${applicantName}`);
-                    return true;
-                } else {
-                    throw new Error('Teams webhook failed');
-                }
-            } catch (error) {
-                console.error('Teams notification error:', error);
-                alert('Failed to send name check to Teams: ' + error.message);
-                return false;
-            }
-        }
+            });
+            console.log('Loaded', applications.length, 'applications');
+            updateStats();
+            renderApplications();
+        });
 
         function updateStats() {
             const pending = applications.filter(app => app.status === 'pending').length;
             const accepted = applications.filter(app => app.status === 'accepted').length;
             const declined = applications.filter(app => app.status === 'declined').length;
-            const total = applications.length;
-
             document.getElementById('pendingCount').textContent = pending;
             document.getElementById('acceptedCount').textContent = accepted;
             document.getElementById('declinedCount').textContent = declined;
-            document.getElementById('totalCount').textContent = total;
+            document.getElementById('totalCount').textContent = applications.length;
         }
 
-        function viewCV(id) {
-            const app = applications.find(a => a.id === id);
+        window.viewCV = function(firestoreId) {
+            const app = applications.find(a => a.firestoreId === firestoreId);
             if (!app) return;
-
             const modal = document.getElementById('cvModal');
             const modalTitle = document.getElementById('modalTitle');
             const modalBody = document.getElementById('modalBody');
-
             modalTitle.textContent = `CV - ${app.name}`;
 
             if (!app.cvData || !app.cvData.data) {
@@ -760,121 +712,117 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
                         </svg>
                         <h3>CV Not Available</h3>
-                        <p>The CV file was not stored.</p>
-                        <p style="margin-top: 10px;"><strong>Filename:</strong> ${app.cv || 'Not provided'}</p>
+                        <p>Filename: ${app.cv || 'Not provided'}</p>
                     </div>
                 `;
             } else {
                 const isPDF = app.cvData.type === 'application/pdf';
-                
                 if (isPDF) {
-                    modalBody.innerHTML = `<iframe src="${app.cvData.data}" class="cv-viewer" type="application/pdf"></iframe>`;
+                    modalBody.innerHTML = `<iframe src="${app.cvData.data}" class="cv-viewer"></iframe>`;
                 } else {
                     modalBody.innerHTML = `
                         <div class="no-cv-message">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                            </svg>
                             <h3>${app.cvData.name}</h3>
-                            <p>This is a ${app.cvData.type} file.</p>
-                            <button class="btn btn-view-cv" style="margin-top: 20px; padding: 12px 24px;" onclick="downloadCV(${id})">Download CV</button>
+                            <p>${app.cvData.type}</p>
+                            <button class="btn btn-view-cv" style="margin-top: 20px;" onclick="downloadCV('${app.firestoreId}')">Download</button>
                         </div>
                     `;
                 }
             }
-
             modal.classList.add('show');
-        }
+        };
 
-        function downloadCV(id) {
-            const app = applications.find(a => a.id === id);
-            if (!app || !app.cvData) return;
+        window.downloadCV = function(firestoreId) {
+            const app = applications.find(a => a.firestoreId === firestoreId);
+            if (!app?.cvData) return;
             const link = document.createElement('a');
             link.href = app.cvData.data;
             link.download = app.cvData.name;
             link.click();
-        }
+        };
 
-        function showPreviousContract(id) {
-            const app = applications.find(a => a.id === id);
+        window.showPreviousContract = function(firestoreId) {
+            const app = applications.find(a => a.firestoreId === firestoreId);
             if (!app) return;
             pendingContractApp = app;
             document.getElementById('contractModal').classList.add('show');
             document.getElementById('otherContractInput').style.display = 'none';
-            document.getElementById('otherContractText').value = '';
-        }
+        };
 
-        function showOtherInput() {
+        window.showOtherInput = function() {
             document.getElementById('otherContractInput').style.display = 'block';
-            document.getElementById('otherContractText').focus();
-        }
+        };
 
-        function selectContract(contractName) {
+        window.selectContract = async function(contractName) {
             if (!pendingContractApp) return;
-            pendingContractApp.previousContract = contractName;
-            saveApplications();
-            renderApplications();
-            closeModal('contractModal');
-            pendingContractApp = null;
-        }
-
-        function submitOtherContract() {
-            const otherValue = document.getElementById('otherContractText').value.trim();
-            if (!otherValue) {
-                alert('Please enter a contract name');
-                return;
-            }
-            selectContract(`Other: ${otherValue}`);
-        }
-
-        async function sendNameCheck(id) {
-            const app = applications.find(a => a.id === id);
-            if (!app) return;
-            await sendTeamsNotification(app.name);
-        }
-
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.remove('show');
-            if (modalId === 'declineModal') pendingDeclineApp = null;
-            if (modalId === 'contractModal') pendingContractApp = null;
-        }
-
-        async function processDecline(reason) {
-            if (!pendingDeclineApp) return;
-            pendingDeclineApp.status = 'declined';
-            pendingDeclineApp.isNew = false;
-            pendingDeclineApp.declineReason = reason;
-            saveApplications();
-            updateStats();
-            renderApplications();
-            await sendDeclineEmail(pendingDeclineApp, reason);
-            closeModal('declineModal');
-            pendingDeclineApp = null;
-        }
-
-        document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('modal')) {
-                e.target.classList.remove('show');
-            }
-        });
-
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') {
-                closeModal('cvModal');
-                closeModal('declineModal');
+            try {
+                await updateDoc(doc(db, 'applications', pendingContractApp.firestoreId), {
+                    previousContract: contractName
+                });
                 closeModal('contractModal');
+            } catch (error) {
+                alert('Error: ' + error.message);
             }
-        });
+        };
+
+        window.submitOtherContract = function() {
+            const val = document.getElementById('otherContractText').value.trim();
+            if (!val) return alert('Enter contract name');
+            selectContract(`Other: ${val}`);
+        };
+
+        window.sendNameCheck = async function(firestoreId) {
+            const app = applications.find(a => a.firestoreId === firestoreId);
+            if (!app) return;
+            try {
+                const response = await fetch(TEAMS_WEBHOOK, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        "@type": "MessageCard",
+                        "summary": "Name Check",
+                        "sections": [{
+                            "activityTitle": "Name Check Request",
+                            "facts": [{"name": "Applicant:", "value": app.name}]
+                        }]
+                    })
+                });
+                if (response.ok) alert(`Sent to Teams: ${app.name}`);
+                else throw new Error('Failed');
+            } catch (error) {
+                alert('Teams error: ' + error.message);
+            }
+        };
+
+        window.closeModal = function(modalId) {
+            document.getElementById(modalId).classList.remove('show');
+            pendingDeclineApp = null;
+            pendingContractApp = null;
+        };
+
+        window.processDecline = async function(reason) {
+            if (!pendingDeclineApp) return;
+            try {
+                await updateDoc(doc(db, 'applications', pendingDeclineApp.firestoreId), {
+                    status: 'declined',
+                    isNew: false,
+                    declineReason: reason
+                });
+                const templateId = reason === 'area' ? EMAIL_CONFIG.declineAreaTemplateId : EMAIL_CONFIG.declineQualificationsTemplateId;
+                await emailjs.send(EMAIL_CONFIG.serviceId, templateId, {
+                    to_email: pendingDeclineApp.email,
+                    to_name: pendingDeclineApp.name,
+                    position: pendingDeclineApp.position
+                });
+                closeModal('declineModal');
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        };
 
         function renderApplications() {
             const container = document.getElementById('applicationsList');
             let filtered = currentTab === 'all' ? applications : applications.filter(app => app.status === currentTab);
-
-            filtered.sort((a, b) => {
-                const dateCompare = new Date(b.date) - new Date(a.date);
-                if (dateCompare !== 0) return dateCompare;
-                return b.id - a.id;
-            });
 
             if (filtered.length === 0) {
                 container.innerHTML = `
@@ -883,30 +831,26 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
                         </svg>
                         <h3>No applications found</h3>
-                        <p>There are no ${currentTab === 'all' ? '' : currentTab} applications at this time.</p>
                     </div>
                 `;
                 return;
             }
 
             container.innerHTML = filtered.map(app => {
-                const isNew = app.isNew || false;
-                const positionDisplay = app.position ? app.position : 'N/A';
                 const contractInfo = app.previousContract ? `<span class="previous-contract-info">${app.previousContract}</span>` : '';
-                
                 return `
                 <div class="application-card">
                     <div class="card-header">
                         <div class="applicant-info">
                             <h4>
                                 ${app.name}
-                                ${isNew ? '<span class="new-badge">NEW</span>' : ''}
+                                ${app.isNew ? '<span class="new-badge">NEW</span>' : ''}
                                 ${contractInfo}
                             </h4>
                             <p>${app.email}</p>
                         </div>
                         <div>
-                            <span class="position-tag ${app.position ? app.position.toLowerCase().replace(/\s+/g, '-') : 'smet2-engineer'}">${positionDisplay}</span>
+                            <span class="position-tag ${app.position?.toLowerCase().replace(/\s+/g, '-') || 'smet2-engineer'}">${app.position || 'N/A'}</span>
                         </div>
                         <div class="date">${app.date}</div>
                         <div>
@@ -938,84 +882,65 @@
                         <div class="detail-item">
                             <div class="detail-label">Qualifications</div>
                             <div class="qualifications">
-                                ${app.qualifications && app.qualifications.length > 0 
+                                ${app.qualifications?.length > 0 
                                     ? app.qualifications.map(q => `<span class="qual-badge">${q.toUpperCase()}</span>`).join('')
-                                    : '<span class="detail-value">None listed</span>'}
+                                    : '<span class="detail-value">None</span>'}
                             </div>
                         </div>
                     </div>
 
                     <div class="action-buttons">
-                        ${app.cv ? `<button class="btn btn-view-cv" onclick="viewCV(${app.id})">View CV</button>` : ''}
-                        <button class="btn btn-previous-contract" onclick="showPreviousContract(${app.id})">Previous Contract</button>
-                        <button class="btn btn-name-check" onclick="sendNameCheck(${app.id})">Name Check</button>
+                        ${app.cv ? `<button class="btn btn-view-cv" onclick="viewCV('${app.firestoreId}')">View CV</button>` : ''}
+                        <button class="btn btn-previous-contract" onclick="showPreviousContract('${app.firestoreId}')">Previous Contract</button>
+                        <button class="btn btn-name-check" onclick="sendNameCheck('${app.firestoreId}')">Name Check</button>
                         ${app.status === 'pending' ? `
-                            <button class="btn btn-accept" onclick="updateStatus(${app.id}, 'accepted')">Accept</button>
-                            <button class="btn btn-decline" onclick="updateStatus(${app.id}, 'declined')">Decline</button>
+                            <button class="btn btn-accept" onclick="updateStatus('${app.firestoreId}', 'accepted')">Accept</button>
+                            <button class="btn btn-decline" onclick="updateStatus('${app.firestoreId}', 'declined')">Decline</button>
                         ` : ''}
                     </div>
                 </div>
             `}).join('');
         }
 
-        function updateStatus(id, newStatus) {
-            const app = applications.find(a => a.id === id);
+        window.updateStatus = async function(firestoreId, newStatus) {
+            const app = applications.find(a => a.firestoreId === firestoreId);
             if (!app) return;
 
             if (newStatus === 'declined') {
                 pendingDeclineApp = app;
                 document.getElementById('declineModal').classList.add('show');
             } else {
-                app.status = newStatus;
-                app.isNew = false;
-                saveApplications();
-                updateStats();
-                renderApplications();
+                try {
+                    await updateDoc(doc(db, 'applications', firestoreId), {
+                        status: newStatus,
+                        isNew: false
+                    });
+                } catch (error) {
+                    alert('Error: ' + error.message);
+                }
             }
-        }
+        };
 
-        function switchTab(tab) {
+        window.switchTab = function(tab) {
             currentTab = tab;
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             event.target.classList.add('active');
             renderApplications();
-        }
+        };
 
-        function saveApplications() {
-            try {
-                window.localStorage.setItem('nguApplications', JSON.stringify(applications));
-            } catch (e) {
-                console.warn('Could not save to localStorage');
-            }
-        }
-
-        window.addEventListener('storage', function(e) {
-            if (e.key === 'nguApplications') {
-                try {
-                    applications = JSON.parse(e.newValue) || [];
-                    updateStats();
-                    renderApplications();
-                } catch (err) {
-                    console.warn('Error parsing storage event');
-                }
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('show');
             }
         });
 
-        setInterval(() => {
-            try {
-                const stored = JSON.parse(window.localStorage.getItem('nguApplications')) || [];
-                if (stored.length > applications.length) {
-                    applications = stored;
-                    updateStats();
-                    renderApplications();
-                }
-            } catch (e) {
-                console.warn('Error checking for new applications');
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal('cvModal');
+                closeModal('declineModal');
+                closeModal('contractModal');
             }
-        }, 2000);
-
-        updateStats();
-        renderApplications();
+        });
     </script>
 </body>
 </html>
