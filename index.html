@@ -675,6 +675,7 @@
             applications = [];
             snapshot.forEach((docSnap) => {
                 const data = docSnap.data();
+                console.log('Application data:', data); // Debug log
                 const timestamp = data.timestamp?.toDate() || new Date();
                 const day = String(timestamp.getDate()).padStart(2, '0');
                 const month = String(timestamp.getMonth() + 1).padStart(2, '0');
@@ -702,32 +703,45 @@
             document.getElementById('totalCount').textContent = applications.length;
         }
 
-        window.viewCV = function(cvURL, name) {
+        window.viewCV = function(firestoreId) {
+            const app = applications.find(a => a.firestoreId === firestoreId);
+            if (!app) return;
+            
             const modal = document.getElementById('cvModal');
             const modalTitle = document.getElementById('modalTitle');
             const modalBody = document.getElementById('modalBody');
-            modalTitle.textContent = `CV - ${name}`;
+            modalTitle.textContent = `CV - ${app.name}`;
             
-            if (cvURL) {
-                const fileExt = cvURL.split('.').pop().toLowerCase().split('?')[0];
+            console.log('CV URL:', app.cvURL); // Debug
+            
+            if (app.cvURL && app.cvURL !== '' && app.cvURL !== 'undefined') {
+                const fileExt = app.cvURL.split('.').pop().toLowerCase().split('?')[0];
                 const isPDF = fileExt === 'pdf';
                 
                 modalBody.innerHTML = `
                     <div class="cv-actions">
-                        <a href="${cvURL}" target="_blank" class="btn btn-view-cv" style="text-decoration: none;">
+                        <a href="${app.cvURL}" target="_blank" class="btn btn-view-cv" style="text-decoration: none;">
                             Open in New Tab
                         </a>
-                        <a href="${cvURL}" download class="btn btn-download" style="text-decoration: none;">
+                        <a href="${app.cvURL}" download class="btn btn-download" style="text-decoration: none;">
                             Download CV
                         </a>
                     </div>
-                    ${isPDF ? `<iframe src="${cvURL}" class="cv-viewer-frame" frameborder="0"></iframe>` : 
+                    ${isPDF ? `<iframe src="${app.cvURL}" class="cv-viewer-frame" frameborder="0"></iframe>` : 
                     `<div style="text-align: center; padding: 40px;">
-                        <p>Preview not available for this file type. Use buttons above to view or download.</p>
+                        <p>Preview not available for this file type (.${fileExt}). Use buttons above to view or download.</p>
                     </div>`}
                 `;
             } else {
-                modalBody.innerHTML = '<div class="no-cv-message"><p>No CV available</p></div>';
+                modalBody.innerHTML = `
+                    <div class="no-cv-message">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                        </svg>
+                        <h3>CV Not Available</h3>
+                        <p>The CV file could not be found. Filename: ${app.cvFileName || 'Unknown'}</p>
+                    </div>
+                `;
             }
             modal.classList.add('show');
         };
@@ -882,7 +896,7 @@
                         <div class="detail-item"><div class="detail-label">Qualifications</div><div class="qualifications">${qualBadges}</div></div>
                     </div>
                     <div class="action-buttons">
-                        <button class="btn btn-view-cv" onclick="viewCV('${app.cvURL || ''}', '${app.name}')">View CV</button>
+                        <button class="btn btn-view-cv" onclick="viewCV('${app.firestoreId}')">View CV</button>
                         <button class="btn btn-previous-contract" onclick="showPreviousContract('${app.firestoreId}')">Previous Contract</button>
                         <button class="btn btn-name-check" onclick="sendNameCheck('${app.firestoreId}')">Name Check</button>
                         ${app.status === 'pending' ? `
